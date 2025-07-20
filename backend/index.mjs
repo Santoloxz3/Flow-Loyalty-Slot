@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { withdraw, checkBackendBalance } from "./withdraw.mjs";
-import { getFreeSpin, useFreeSpin } from "./freeSpin.mjs";
+import { getFreeSpin, useFreeSpin } from "./freespin.mjs";
 import { getHighBalanceSpin, useHighBalanceSpin } from "./highbalancespin.mjs";
 import balanceRoutes from "./balance.mjs";
 const app = express();
