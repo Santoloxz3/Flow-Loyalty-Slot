@@ -420,24 +420,29 @@ function GameContainer() {
         <h1 className="app-title neon-text">$Flow Loyalty Slot</h1>
         <div className="slot-frame-wrapper">
           <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
-		  <iframe
-		    title="Slot Game"
-		    src="/slot/index.html"
-		    className="game-frame"
-		    onLoad={() => {
-		  	  console.log("📥 iframe caricato");
-			  const checkBalanceReady = setInterval(() => {
-			    if (slotBalance > 0) {
-				  console.log("✅ Balance pronto, invio al gioco:", slotBalance);
-				  postBalanceToGame(slotBalance);
-				  clearInterval(checkBalanceReady);
-			    } else {
-				   console.log("⏳ In attesa che slotBalance sia > 0...");
-			    }
-			  }, 300); // controlla ogni 300ms
-		    }}
-		  />
-        </div>
+		  <div style={{
+		    position: "relative",
+		    width: "100vw",
+		    height: "100vh",
+		    overflow: "hidden",
+		    display: "flex",
+		    justifyContent: "center",
+		    alignItems: "center",
+		    background: "#000"
+		  }}>
+		    <iframe
+			  title="Slot Game"
+			  src="/slot/index.html"
+			  style={{
+			    width: "100vw",
+			    height: "100vh",
+			    border: "none",
+			    borderRadius: "60px", // rimuovi se non vuoi arrotondamenti
+			    boxShadow: "0 0 48px rgba(0,0,0,0.5)",
+			    background: "#000"
+			  }}
+		    />
+		  </div>
       </div>
 
       <ToastContainer position="bottom-right" theme="dark" />
