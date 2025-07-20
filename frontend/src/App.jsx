@@ -264,7 +264,7 @@ function GameContainer() {
 	  if (data.type === "SPIN_WIN") {
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
-	      const winAudio = new Audio("/public/slot/win-sound.wav");
+	      const winAudio = new Audio("/slot/win-sound.wav");
 		  winAudio.play();
 
 	  	  setFlashWin(true);
