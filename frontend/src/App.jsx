@@ -179,12 +179,12 @@ function GameContainer() {
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const simboliVincita = [
-    { src: "/public/slot/images/Glass.png", payout: " 5000 $FLOW" },
-    { src: "/public/slot/images/Glass.png", payout: " 5000 $FLOW" },
-    { src: "/public/slot/images/Moon.png", payout: " 10000 $FLOW" },
-    { src: "/public/slot/images/Bag.png", payout: " 20000 $FLOW" },
-    { src: "/public/slot/images/Flow1.png", payout: " 30000 $FLOW" },
-    { src: "/public/slot/images/jolly1.png", payout: "👑 100000 $FLOW" },	
+    { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
+    { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
+    { src: "/slot/images/Moon.png", payout: " 10000 $FLOW" },
+    { src: "/slot/images/Bag.png", payout: " 20000 $FLOW" },
+    { src: "/slot/images/Flow1.png", payout: " 30000 $FLOW" },
+    { src: "/slot/images/jolly1.png", payout: "👑 100000 $FLOW" },	
   ];
 
 
