@@ -418,12 +418,12 @@ function GameContainer() {
 
       <div className="center-panel">
         <h1 className="app-title neon-text">$Flow Loyalty Slot</h1>
-        <div className="responsive-frame-wrapper">
-          <div className="frame-container">
+        <div className="slot-frame-wrapper">
+          <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
 		  <iframe
 		    title="Slot Game"
 		    src="/slot/index.html"
-		    className="responsive-frame"
+		    className="game-frame"
 		    onLoad={() => {
 		  	  console.log("📥 iframe caricato");
 			  const checkBalanceReady = setInterval(() => {
@@ -439,6 +439,7 @@ function GameContainer() {
 		  />
         </div>
       </div>
+
       <ToastContainer position="bottom-right" theme="dark" />
 	  {showInfoModal && (
 	    <div className="log-modal-backdrop" onClick={() => setShowInfoModal(false)}>
