@@ -180,7 +180,6 @@ function GameContainer() {
 
   const simboliVincita = [
     { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
-    { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
     { src: "/slot/images/Moon.png", payout: " 10000 $FLOW" },
     { src: "/slot/images/Bag.png", payout: " 20000 $FLOW" },
     { src: "/slot/images/Flow1.png", payout: " 30000 $FLOW" },
