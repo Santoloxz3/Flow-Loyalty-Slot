@@ -179,11 +179,11 @@ function GameContainer() {
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const simboliVincita = [
-    { src: "/images/Glass.png", payout: " 5000 $FLOW" },
-    { src: "/images/Moon.png", payout: " 10000 $FLOW" },
-    { src: "/images/Bag.png", payout: " 20000 $FLOW" },
-    { src: "/images/Flow1.png", payout: " 30000 $FLOW" },
-    { src: "/images/jolly1.png", payout: "👑 100000 $FLOW" },	
+    { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
+    { src: "/slot/images/Moon.png", payout: " 10000 $FLOW" },
+    { src: "/slot/images/Bag.png", payout: " 20000 $FLOW" },
+    { src: "/slot/images/Flow1.png", payout: " 30000 $FLOW" },
+    { src: "/slot/images/jolly1.png", payout: "👑 100000 $FLOW" },	
   ];
 
 
@@ -263,7 +263,7 @@ function GameContainer() {
 	  if (data.type === "SPIN_WIN") {
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
-	      const winAudio = new Audio("/win-sound.wav");
+	      const winAudio = new Audio("/slot/win-sound.wav");
 		  winAudio.play();
 
 	  	  setFlashWin(true);
@@ -381,7 +381,7 @@ function GameContainer() {
 				    onClick={async () => {
 					  const ok = await checkBackendBalanceOk();
 					  if (!ok) {
-					    toast.error("Wallet premi vuoto. Attendi ricarica.");
+					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
 					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
