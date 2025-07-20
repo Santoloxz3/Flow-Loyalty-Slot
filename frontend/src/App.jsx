@@ -142,7 +142,7 @@ function GameContainer() {
 	  const res = await fetch("https://flow-loyalty-backend.onrender.com/check-backend-balance");
 	  const data = await res.json();
 	  const backendBalance = BigInt(data.balance || "0");
-	  const MIN_REQUIRED = 10_000_000_000_000_000n;
+	  const MIN_REQUIRED = 10_000_000_000n; // 10 FLOW in nanos
 	  return backendBalance >= MIN_REQUIRED;
     } catch (err) {
 	  console.error("❌ Errore fetch backend balance:", err);
