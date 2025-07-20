@@ -340,7 +340,7 @@ function GameContainer() {
   useEffect(() => {
     if (slotBalance !== null) {
 	  console.log("📤 React invia balance aggiornato al gioco:", slotBalance);
-	  postBalanceToGame(slotBalance);
+	  setTimeout(() => postBalanceToGame(slotBalance), 5000);
     }
   }, [slotBalance]);
 
@@ -420,18 +420,23 @@ function GameContainer() {
         <h1 className="app-title neon-text">$Flow Loyalty Slot</h1>
         <div className="slot-frame-wrapper">
           <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
-          <iframe
-            title="Slot Game"
-            src="/slot/index.html"
-            className="game-frame"
-            onLoad={() => {
-              // appena l'iframe è pronto, invia il balance
-              setTimeout(() => {
-                postBalanceToGame(slotBalance ?? 0);
-                console.log("✅ Balance inviato al gioco:", slotBalance);
-              }, 200);
-            }}
-          />
+		  <iframe
+		    title="Slot Game"
+		    src="/slot/index.html"
+		    className="game-frame"
+		    onLoad={() => {
+		  	  console.log("📥 iframe caricato");
+			  const checkBalanceReady = setInterval(() => {
+			    if (slotBalance > 0) {
+				  console.log("✅ Balance pronto, invio al gioco:", slotBalance);
+				  postBalanceToGame(slotBalance);
+				  clearInterval(checkBalanceReady);
+			    } else {
+				   console.log("⏳ In attesa che slotBalance sia > 0...");
+			    }
+			  }, 300); // controlla ogni 300ms
+		    }}
+		  />
         </div>
       </div>
 
