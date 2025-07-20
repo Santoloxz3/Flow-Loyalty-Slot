@@ -34,7 +34,7 @@ function GameContainer() {
   const fetchFreeSpins = async () => {
     if (!account?.address) return;
     try {
-      const res = await fetch(`http://localhost:3000/free-spin?wallet=${account.address}`);
+      const res = await fetch(`https://flow-loyalty-backend.onrender.com/free-spin?wallet=${account.address}`);
       const data = await res.json();
       setFreeSpinsLeft(data.spinsLeft ?? 0);
     } catch (err) {
@@ -45,7 +45,7 @@ function GameContainer() {
   const fetchHighBalanceSpin = async () => {
     if (!account?.address) return;
     try {
-  	  const res = await fetch(`http://localhost:3000/high-balance-spin?wallet=${account.address}`);
+  	  const res = await fetch(`https://flow-loyalty-backend.onrender.com/high-balance-spin?wallet=${account.address}`);
 	  const data = await res.json();
 	  setHighBalanceCanSpin(data.canSpin ?? false);
     } catch (err) {
@@ -57,7 +57,7 @@ function GameContainer() {
 
   const loadSlotBalance = async (wallet) => {
     try {
-	  const res = await fetch(`http://localhost:3000/balance?wallet=${wallet}`);
+	  const res = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${wallet}`);
 	  const data = await res.json();
 	  const balance = data.balance ?? 0;
 	  setSlotBalance(balance);
@@ -70,7 +70,7 @@ function GameContainer() {
 
   const updateSlotBalance = async (wallet, amountToAdd) => {
     try {
-      const res = await fetch("http://localhost:3000/balance/update", {
+      const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet, amountToAdd }),
@@ -106,7 +106,7 @@ function GameContainer() {
       const signed = await signMessage({ message: encodedMessage });
       const publicKeyHex = [...account.publicKey].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const res = await fetch("http://localhost:3000/withdraw", {
+      const res = await fetch("https://flow-loyalty-backend.onrender.com/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet: account.address, message, signature: signed.signature, publicKey: publicKeyHex }),
@@ -139,7 +139,7 @@ function GameContainer() {
 
   const checkBackendBalanceOk = async () => {
     try {
-	  const res = await fetch("http://localhost:3000/check-backend-balance");
+	  const res = await fetch("https://flow-loyalty-backend.onrender.com/check-backend-balance");
 	  const data = await res.json();
 	  const backendBalance = BigInt(data.balance || "0");
 	  const MIN_REQUIRED = 10_000_000_000_000_000n;
@@ -217,7 +217,7 @@ function GameContainer() {
 	  
 	  if (data.type === "SPIN_REQUEST") {
 	    try {
-		  const backendRes = await fetch("http://localhost:3000/check-backend-balance");
+		  const backendRes = await fetch("https://flow-loyalty-backend.onrender.com/check-backend-balance");
 		  const backendData = await backendRes.json();
 
 		  const backendBalance = BigInt(backendData.balance || "0");
@@ -240,7 +240,7 @@ function GameContainer() {
 
 	    try {
 		  const newBalance = slotBalance - SPIN_COST;
-		  await fetch("http://localhost:3000/balance/set", {
+		  await fetch("https://flow-loyalty-backend.onrender.com/balance/set", {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address, newBalance }),
@@ -293,7 +293,7 @@ function GameContainer() {
 
 	  if (data.type === "FREE_SPIN_USED_NFT") {
 	    try {
-		  const res = await fetch("http://localhost:3000/free-spin", {
+		  const res = await fetch("https://flow-loyalty-backend.onrender.com/free-spin", {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
@@ -312,7 +312,7 @@ function GameContainer() {
 
 	  if (data.type === "FREE_SPIN_USED_BAL") {
 	    try {
-		  const res = await fetch("http://localhost:3000/high-balance-spin", {
+		  const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
