@@ -143,7 +143,7 @@
   width: 1280px;
   height: 720px;
   border: none;
-  transform: scale(1.25); /* zoom! */
+  transform: scale(1); /* zoom! */
   transform-origin: top center;
   border-radius: 80px;
   box-shadow: 0 0 48px rgba(0, 0, 0, 0.5);
