@@ -264,7 +264,7 @@ function GameContainer() {
 	  if (data.type === "SPIN_WIN") {
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
-	      const winAudio = new Audio("/slot/win-sound.wav");
+	      const winAudio = new Audio("/public/slot/win-sound.wav");
 		  winAudio.play();
 
 	  	  setFlashWin(true);
@@ -286,9 +286,11 @@ function GameContainer() {
 	  }
 
 
-      if (data.type === "REQUEST_BALANCE") {
-        postBalanceToGame(slotBalance);
-      }
+	  if (data.type === "REQUEST_BALANCE") {
+	    const safeBalance = slotBalance ?? 0;
+	    console.log("📤 Il gioco ha chiesto il saldo. Invio:", safeBalance);
+	    postBalanceToGame(safeBalance);
+	  }
 	  
       console.log("✅ React ha ricevuto FREE_SPIN_USED, sto aggiornando Supabase");
 
@@ -411,7 +413,18 @@ function GameContainer() {
         <h1 className="app-title neon-text">$Flow Loyalty Slot</h1>
         <div className="slot-frame-wrapper">
           <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
-          <iframe title="Slot Game" src="/slot/index.html" className="game-frame" />
+          <iframe
+            title="Slot Game"
+            src="/slot/index.html"
+            className="game-frame"
+            onLoad={() => {
+              // appena l'iframe è pronto, invia il balance
+              setTimeout(() => {
+                postBalanceToGame(slotBalance ?? 0);
+                console.log("✅ Balance inviato al gioco:", slotBalance);
+              }, 200);
+            }}
+          />
         </div>
       </div>
 
