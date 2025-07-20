@@ -337,6 +337,13 @@ function GameContainer() {
     return () => window.removeEventListener("message", handleMessage);
   }, [connected, account, slotBalance]);
 
+  useEffect(() => {
+    if (slotBalance !== null) {
+	  console.log("📤 React invia balance aggiornato al gioco:", slotBalance);
+	  postBalanceToGame(slotBalance);
+    }
+  }, [slotBalance]);
+
   return (
     <div className="app-container">
       <div className="left-panel">
