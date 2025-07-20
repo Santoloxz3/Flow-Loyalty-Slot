@@ -418,8 +418,8 @@ function GameContainer() {
 
       <div className="center-panel">
         <h1 className="app-title neon-text">$Flow Loyalty Slot</h1>
-        <div className="slot-frame-wrapper">
-          <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
+        <div className="responsive-frame-wrapper">
+          <div className="frame-container">
 		  <iframe
 		    title="Slot Game"
 		    src="/slot/index.html"
