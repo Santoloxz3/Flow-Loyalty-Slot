@@ -129,7 +129,7 @@ export async function withdraw(req, res) {
 
 	// ✅ Controllo saldo minimo richiesto nel wallet backend
 	const totalAvailable = coins.data.reduce((sum, c) => sum + BigInt(c.balance), 0n);
-	const MIN_REQUIRED = 10_000_000_000n; // 10 FLOW = 10e9 nanos
+	const MIN_REQUIRED = 50_000_000_000n; // 50000 $FLOW
 	if (totalAvailable < MIN_REQUIRED) {
 	  return res.status(500).json({ message: "Il wallet dei premi non ha fondi sufficienti per effettuare prelievi." });
 	}
