@@ -423,7 +423,7 @@ function GameContainer() {
 		  <iframe
 		    title="Slot Game"
 		    src="/slot/index.html"
-		    className="game-frame"
+		    className="responsive-frame"
 		    onLoad={() => {
 		  	  console.log("📥 iframe caricato");
 			  const checkBalanceReady = setInterval(() => {
