@@ -351,19 +351,25 @@ function GameContainer() {
     <div className="app-container">
 	  {isWebView() && (
 	    <div className="wallet-warning" style={{ marginTop: "1rem", textAlign: "center" }}>
-		  ⚠️ The app has limited functionality in this mode.
+		  ⚠️ L'app ha funzionalità limitate in questa modalità.
 		  <br />
-		  <a
-		    href={window.location.href}
-		    target="_blank"
-		    rel="noopener noreferrer"
+		  <button
+		    onClick={() => {
+			  const url = window.location.href;
+			  try {
+			    window.open(url, '_blank');
+			  } catch (e) {
+			    window.location.href = url;
+			  }
+		    }}
 		    className="btn btn-deposit"
 		    style={{ display: "inline-block", marginTop: "1rem" }}
 		  >
-		    🌐 Tap here to open in Chrome/Safari.
-		  </a>
+		    🌐 Tocca qui per aprire in Chrome/Safari
+		  </button>
 	    </div>
 	  )}
+
 	
       <div className="left-panel">
         <ConnectButton />
