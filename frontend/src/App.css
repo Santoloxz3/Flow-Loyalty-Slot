@@ -463,3 +463,57 @@
   background-color: #2980b9;
   transform: scale(1.08);
 }
+
+@media (max-width: 600px) {
+  .app-container {
+    padding: 1rem;
+    gap: 2rem;
+  }
+
+  .left-panel {
+    flex: 1;
+    margin-left: 0;
+    padding: 1rem;
+    border-radius: 32px;
+  }
+
+  .center-panel {
+    max-width: 100%;
+  }
+
+  .game-frame {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    border-radius: 32px;
+  }
+
+  .slot-frame-wrapper {
+    padding: 8px;
+    border-radius: 32px;
+  }
+
+  .app-title {
+    font-size: 2.2rem;
+    text-align: center;
+  }
+
+  .btn {
+    font-size: 1.4rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .btn-deposit,
+  .btn-withdraw,
+  .btn-free-spin,
+  .btn-log,
+  .btn-close {
+    font-size: 1.6rem;
+    padding: 0.8rem 1rem;
+  }
+
+  .wallet-box p:nth-child(2),
+  .wallet-box p:nth-child(3) {
+    font-size: 1.3rem;
+  }
+}
