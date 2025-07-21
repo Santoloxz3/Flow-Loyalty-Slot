@@ -153,8 +153,8 @@ function GameContainer() {
 
   const handleDeposit = async () => {
     if (!connected || !account?.address) {
-	  toast.error("Connettiti al wallet.");
-	  return;
+      toast.error("Connettiti al wallet.");
+      return;
     }
 
     const amount = depositMultiplier * 10000;
@@ -162,37 +162,52 @@ function GameContainer() {
     setLoading(true);
 
     try {
-	  const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
+      const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
 
-	  if (!coins.data.length) {
-	    toast.error("Saldo insufficiente.");
-	    setLoading(false);
-	    return;
-	  }
+      if (!coins.data.length) {
+        toast.error("Nessun coin disponibile nel wallet.");
+        setLoading(false);
+        return;
+      }
 
-	  const matchingCoin = coins.data.find(c => BigInt(c.balance) === amountBigInt);
-	  if (!matchingCoin) {
-	    toast.error("Devi avere un singolo coin pari all’importo da depositare.");
-	    setLoading(false);
-	    return;
-	  }
+      console.log("🪙 Coin trovati:", coins.data.map(c => ({
+        id: c.coinObjectId,
+        balance: c.balance
+      })));
 
-	  const tx = new TransactionBlock();
-	  tx.transferObjects([tx.object(matchingCoin.coinObjectId)], tx.pure(SLOT_WALLET_ADDRESS));
+      const exactCoin = coins.data.find(c => BigInt(c.balance) === amountBigInt);
+      const biggerCoin = coins.data.find(c => BigInt(c.balance) > amountBigInt);
 
-	  const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
-	  console.log("✅ Transazione riuscita:", result);
+      const tx = new TransactionBlock();
 
-	  await updateSlotBalance(account.address, amount);
-	  await fetchBalances();
-	  toast.success(`Depositato: ${amount} $FLOW`);
+      if (exactCoin) {
+        console.log("✅ Uso coin con saldo esatto:", exactCoin.coinObjectId);
+        tx.transferObjects([tx.object(exactCoin.coinObjectId)], tx.pure(SLOT_WALLET_ADDRESS));
+      } else if (biggerCoin) {
+        console.log("🔀 Split da coin con saldo maggiore:", biggerCoin.coinObjectId);
+        const coin = tx.object(biggerCoin.coinObjectId);
+        const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
+        tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
+      } else {
+        toast.error("Nessun coin con saldo sufficiente per coprire il deposito.");
+        setLoading(false);
+        return;
+      }
+
+      const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
+      console.log("✅ Transazione riuscita:", result);
+
+      await updateSlotBalance(account.address, amount);
+      await fetchBalances();
+      toast.success(`Depositato: ${amount} $FLOW`);
     } catch (err) {
-	  console.error("❌ Errore firma o esecuzione:", err);
-	  toast.error(`Errore durante firma o esecuzione: ${err.message || "unknown error"}`);
+      console.error("❌ Errore firma o esecuzione:", err);
+      toast.error(`Errore durante deposito: ${err.message || "errore sconosciuto"}`);
     }
 
     setLoading(false);
   };
+
 
 
 
