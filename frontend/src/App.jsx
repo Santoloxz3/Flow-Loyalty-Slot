@@ -14,9 +14,9 @@ const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
 
 function GameContainer() {
-  const [depositFailed, setDepositFailed] = useState(false);
-  const isNightlyWallet = account?.name?.toLowerCase?.().includes("nightly") ?? false;	
   const { connected, account, signAndExecuteTransactionBlock, signMessage } = useWallet();
+  const [depositFailed, setDepositFailed] = useState(false);	
+  const isNightlyWallet = account?.name?.toLowerCase?.().includes("nightly") ?? false;
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [depositMultiplier, setDepositMultiplier] = useState(1);
   const [slotBalance, setSlotBalance] = useState(0);
