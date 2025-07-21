@@ -152,63 +152,29 @@ function GameContainer() {
 
 
   const handleDeposit = async () => {
-    if (!connected || !account?.address) {
-      toast.error("Connettiti al wallet.");
-      return;
-    }
-
+    if (!connected || !account?.address) return toast.error("Connettiti al wallet.");
     const amount = depositMultiplier * 10000;
     const amountBigInt = BigInt(amount * 1e9);
     setLoading(true);
-
     try {
-      const { data: coinsRaw } = await client.getCoins({
-        owner: account.address,
-        coinType: FLOW_COIN_TYPE,
-      });
-
-      const validCoins = coinsRaw.filter(c => {
-        return c.coinObjectId && BigInt(c.balance) >= amountBigInt;
-      });
-
-      if (!validCoins.length) {
-        toast.error("Nessun coin valido per il deposito.");
-        setLoading(false);
-        return;
-      }
+      const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
+      if (!coins.data.length) return toast.error("Insufficient balance.");
+      const coinObjectId = coins.data[0].coinObjectId;
 
       const tx = new TransactionBlock();
-
-      const selected = validCoins[0];
-      console.log("✅ Uso coin:", selected.coinObjectId, "con saldo:", selected.balance);
-
-      // Prova split
-      const coin = tx.object(selected.coinObjectId);
+      const coin = tx.object(coinObjectId);
       const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
       tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
 
-      const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
-      console.log("✅ Transazione riuscita:", result);
-
+      await signAndExecuteTransactionBlock({ transactionBlock: tx });
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
-      toast.success(`Depositato: ${amount} $FLOW`);
-    } catch (err) {
-      console.error("❌ Errore firma o esecuzione:", err);
-
-      if (err.message?.includes("referenced object")) {
-        toast.error("Errore oggetto coin: apri Nightly su desktop e fai 'Merge Coins'.");
-      } else {
-        toast.error(`Errore durante il deposito: ${err.message || "errore sconosciuto"}`);
-      }
+      toast.success(`Deposit completed: ${amount} $FLOW`);
+    } catch (e) {
+      toast.error("Error during deposit");
     }
-
     setLoading(false);
   };
-
-
-
-
 
   const [showInfoModal, setShowInfoModal] = useState(false);
 
