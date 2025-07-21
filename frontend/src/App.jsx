@@ -152,29 +152,62 @@ function GameContainer() {
 
 
   const handleDeposit = async () => {
-    if (!connected || !account?.address) return toast.error("Connettiti al wallet.");
+    if (!connected || !account?.address) {
+	  toast.error("Connettiti al wallet.");
+	  return;
+    }
+
     const amount = depositMultiplier * 10000;
     const amountBigInt = BigInt(amount * 1e9);
     setLoading(true);
+
     try {
-      const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
-      if (!coins.data.length) return toast.error("Insufficient balance.");
-      const coinObjectId = coins.data[0].coinObjectId;
+	  const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
 
-      const tx = new TransactionBlock();
-      const coin = tx.object(coinObjectId);
-      const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
-      tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
+	  if (!coins.data.length) {
+	    toast.error("Saldo insufficiente.");
+	    setLoading(false);
+	    return;
+	  }
 
-      await signAndExecuteTransactionBlock({ transactionBlock: tx });
-      await updateSlotBalance(account.address, amount);
-      await fetchBalances();
-      toast.success(`Deposit completed: ${amount} $FLOW`);
+	  console.log("🪙 Coin trovati:", coins.data.map(c => ({
+	    id: c.coinObjectId,
+	    balance: c.balance
+	  })));
+
+	  const matchingCoin = coins.data.find(c => BigInt(c.balance) === amountBigInt);
+	  const anyCoin = coins.data.find(c => BigInt(c.balance) > amountBigInt);
+
+	  const tx = new TransactionBlock();
+ 
+	  if (matchingCoin) {
+	    console.log("✅ Uso coin diretto senza split:", matchingCoin.coinObjectId);
+	    tx.transferObjects([tx.object(matchingCoin.coinObjectId)], tx.pure(SLOT_WALLET_ADDRESS));
+	  } else if (anyCoin) {
+	    console.log("🔀 Split da coin:", anyCoin.coinObjectId);
+	    const coin = tx.object(anyCoin.coinObjectId);
+	    const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
+	    tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
+	  } else {
+	    toast.error("Nessun coin con saldo sufficiente.");
+	    setLoading(false);
+	    return;
+	  }
+
+	  const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
+
+	  console.log("✅ Transazione completata:", result);
+	  await updateSlotBalance(account.address, amount);
+	  await fetchBalances();
+	  toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
-      toast.error("Error during deposit");
+	  console.error("❌ Errore durante deposito:", e);
+	  toast.error("Errore durante il deposito. Wallet mobile supportato?");
     }
+
     setLoading(false);
   };
+
 
   const [showInfoModal, setShowInfoModal] = useState(false);
 
