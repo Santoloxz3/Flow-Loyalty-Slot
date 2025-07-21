@@ -12,6 +12,10 @@ const client = new SuiClient({ url: SUI_NODE_URL });
 
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
+const isWebView = () => {
+  const ua = navigator.userAgent || "";
+  return /WebView|wv|Android.*Version\/[\d.]+.*Chrome|iPhone.*AppleWebKit(?!.*Safari)/i.test(ua);
+};
 
 function GameContainer() {
   const { connected, account, signAndExecuteTransactionBlock, signMessage } = useWallet();
@@ -345,6 +349,22 @@ function GameContainer() {
 
   return (
     <div className="app-container">
+	  {isWebView() && (
+	    <div className="wallet-warning" style={{ marginTop: "1rem", textAlign: "center" }}>
+		  ⚠️ The app has limited functionality in this mode.
+		  <br />
+		  <a
+		    href={window.location.href}
+		    target="_blank"
+		    rel="noopener noreferrer"
+		    className="btn btn-deposit"
+		    style={{ display: "inline-block", marginTop: "1rem" }}
+		  >
+		    🌐 Tap here to open in Chrome/Safari.
+		  </a>
+	    </div>
+	  )}
+	
       <div className="left-panel">
         <ConnectButton />
         {isWalletReady ? (
