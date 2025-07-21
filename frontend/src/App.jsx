@@ -170,43 +170,30 @@ function GameContainer() {
 	    return;
 	  }
 
-	  console.log("🪙 Coin trovati:", coins.data.map(c => ({
-	    id: c.coinObjectId,
-	    balance: c.balance
-	  })));
-
 	  const matchingCoin = coins.data.find(c => BigInt(c.balance) === amountBigInt);
-	  const anyCoin = coins.data.find(c => BigInt(c.balance) > amountBigInt);
-
-	  const tx = new TransactionBlock();
- 
-	  if (matchingCoin) {
-	    console.log("✅ Uso coin diretto senza split:", matchingCoin.coinObjectId);
-	    tx.transferObjects([tx.object(matchingCoin.coinObjectId)], tx.pure(SLOT_WALLET_ADDRESS));
-	  } else if (anyCoin) {
-	    console.log("🔀 Split da coin:", anyCoin.coinObjectId);
-	    const coin = tx.object(anyCoin.coinObjectId);
-	    const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
-	    tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
-	  } else {
-	    toast.error("Nessun coin con saldo sufficiente.");
+	  if (!matchingCoin) {
+	    toast.error("Devi avere un singolo coin pari all’importo da depositare.");
 	    setLoading(false);
 	    return;
 	  }
 
-	  const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
+	  const tx = new TransactionBlock();
+	  tx.transferObjects([tx.object(matchingCoin.coinObjectId)], tx.pure(SLOT_WALLET_ADDRESS));
 
-	  console.log("✅ Transazione completata:", result);
+	  const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
+	  console.log("✅ Transazione riuscita:", result);
+
 	  await updateSlotBalance(account.address, amount);
 	  await fetchBalances();
-	  toast.success(`Deposit completed: ${amount} $FLOW`);
-    } catch (e) {
-	  console.error("❌ Errore durante deposito:", e);
-	  toast.error("Errore durante il deposito. Wallet mobile supportato?");
+	  toast.success(`Depositato: ${amount} $FLOW`);
+    } catch (err) {
+	  console.error("❌ Errore firma o esecuzione:", err);
+	  toast.error(`Errore durante firma o esecuzione: ${err.message || "unknown error"}`);
     }
 
     setLoading(false);
   };
+
 
 
   const [showInfoModal, setShowInfoModal] = useState(false);
