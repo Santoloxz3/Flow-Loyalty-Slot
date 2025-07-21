@@ -15,8 +15,6 @@ const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc21
 
 function GameContainer() {
   const { connected, account, signAndExecuteTransactionBlock, signMessage } = useWallet();
-  const [depositFailed, setDepositFailed] = useState(false);	
-  const isNightlyWallet = account?.name?.toLowerCase?.().includes("nightly") ?? false;
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [depositMultiplier, setDepositMultiplier] = useState(1);
   const [slotBalance, setSlotBalance] = useState(0);
@@ -172,17 +170,9 @@ function GameContainer() {
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
       toast.success(`Deposit completed: ${amount} $FLOW`);
-	} catch (err) {
-	  console.error("❌ Errore firma o esecuzione:", err);
-
-	  if (err.message?.includes("referenced object")) {
-		toast.error("Errore coin: probabilmente Nightly mobile. Prova deposito manuale.");
-		setDepositFailed(true); // 👉 Mostra il blocco manuale
-	  } else {
-		toast.error(`Errore durante il deposito: ${err.message || "errore sconosciuto"}`);
-	  }
-	}
-
+    } catch (e) {
+      toast.error("Error during deposit");
+    }
     setLoading(false);
   };
 
@@ -388,46 +378,6 @@ function GameContainer() {
             </div>
 			
             <button onClick={handleDeposit} className="btn btn-deposit" disabled={loading}>💸 Top Up </button>
-			{(isNightlyWallet || depositFailed) && (
-			  <div style={{ marginTop: "2rem", textAlign: "center", width: "100%" }}>
-				<p style={{ color: "white", fontWeight: "bold" }}>⚠️ Problemi con il wallet?</p>
-				<p style={{ color: "#ccc", fontSize: "1.4rem" }}>
-				  Invia manualmente <strong>{depositMultiplier * 10000} $FLOW</strong> al seguente indirizzo:
-				</p>
-				<div style={{
-				  background: "#1f1f2f",
-				  padding: "1rem",
-				  borderRadius: "16px",
-				  wordBreak: "break-all",
-				  color: "#00ffff",
-				  fontSize: "1.2rem"
-				}}>
-				  {SLOT_WALLET_ADDRESS}
-				</div>
-				<button
-				  className="btn"
-				  style={{ marginTop: "1rem", backgroundColor: "#3498db" }}
-				  onClick={() => {
-					navigator.clipboard.writeText(SLOT_WALLET_ADDRESS);
-					toast.info("Indirizzo copiato!");
-				  }}
-				>
-				  📋 Copia indirizzo
-				</button>
-				<button
-				  className="btn"
-				  style={{ marginTop: "1rem", backgroundColor: "#27ae60" }}
-				  onClick={() => {
-					loadSlotBalance(account.address);
-					fetchBalances();
-					toast.success("Saldo aggiornato!");
-					setDepositFailed(false); // reset stato
-				  }}
-				>
-				  🔄 Ho inviato, aggiorna saldo
-				</button>
-			  </div>
-			)}			
             <button onClick={handleWithdraw} className="btn btn-withdraw" disabled={loading}>💰 Withdraw</button>
 			<div style={{ display: "flex", gap: "2rem", width: "100%", justifyContent: "center" }}>
 			  <button className="btn btn-log" onClick={() => setShowLogModal(true)}>
