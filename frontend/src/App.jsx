@@ -162,37 +162,30 @@ function GameContainer() {
     setLoading(true);
 
     try {
-      const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
+      const { data: coinsRaw } = await client.getCoins({
+        owner: account.address,
+        coinType: FLOW_COIN_TYPE,
+      });
 
-      if (!coins.data.length) {
-        toast.error("Nessun coin disponibile nel wallet.");
+      const validCoins = coinsRaw.filter(c => {
+        return c.coinObjectId && BigInt(c.balance) >= amountBigInt;
+      });
+
+      if (!validCoins.length) {
+        toast.error("Nessun coin valido per il deposito.");
         setLoading(false);
         return;
       }
-
-      console.log("🪙 Coin trovati:", coins.data.map(c => ({
-        id: c.coinObjectId,
-        balance: c.balance
-      })));
-
-      const exactCoin = coins.data.find(c => BigInt(c.balance) === amountBigInt);
-      const biggerCoin = coins.data.find(c => BigInt(c.balance) > amountBigInt);
 
       const tx = new TransactionBlock();
 
-      if (exactCoin) {
-        console.log("✅ Uso coin con saldo esatto:", exactCoin.coinObjectId);
-        tx.transferObjects([tx.object(exactCoin.coinObjectId)], tx.pure(SLOT_WALLET_ADDRESS));
-      } else if (biggerCoin) {
-        console.log("🔀 Split da coin con saldo maggiore:", biggerCoin.coinObjectId);
-        const coin = tx.object(biggerCoin.coinObjectId);
-        const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
-        tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
-      } else {
-        toast.error("Nessun coin con saldo sufficiente per coprire il deposito.");
-        setLoading(false);
-        return;
-      }
+      const selected = validCoins[0];
+      console.log("✅ Uso coin:", selected.coinObjectId, "con saldo:", selected.balance);
+
+      // Prova split
+      const coin = tx.object(selected.coinObjectId);
+      const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
+      tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
 
       const result = await signAndExecuteTransactionBlock({ transactionBlock: tx });
       console.log("✅ Transazione riuscita:", result);
@@ -202,11 +195,17 @@ function GameContainer() {
       toast.success(`Depositato: ${amount} $FLOW`);
     } catch (err) {
       console.error("❌ Errore firma o esecuzione:", err);
-      toast.error(`Errore durante deposito: ${err.message || "errore sconosciuto"}`);
+
+      if (err.message?.includes("referenced object")) {
+        toast.error("Errore oggetto coin: apri Nightly su desktop e fai 'Merge Coins'.");
+      } else {
+        toast.error(`Errore durante il deposito: ${err.message || "errore sconosciuto"}`);
+      }
     }
 
     setLoading(false);
   };
+
 
 
 
