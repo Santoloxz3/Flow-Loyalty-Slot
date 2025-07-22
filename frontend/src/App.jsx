@@ -368,12 +368,12 @@ function GameContainer() {
 				  className="btn btn-free-spin glow-effect"
 				  onClick={async () => {
 					console.log("🟢 Click Free Spin");
+					setLastSpinGranted(true); // ✅ Autorizza la vincita
 					const ok = await checkBackendBalanceOk();
 					if (!ok) {
 					  toast.error("Reward wallet empty. Please wait for refill.");
 					  return;
-					}
-                    setLastSpinGranted(true); // ✅ Autorizza la vincita					
+					}                   					
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
@@ -399,13 +399,13 @@ function GameContainer() {
 				  <button
 				    className="btn btn-free-spin btn-highspin glow-effect"
 				    onClick={async () => {
+					  setLastSpinGranted(true); // ✅ Autorizza la vincita	
 					  const ok = await checkBackendBalanceOk();
 					  if (!ok) {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
-                      setLastSpinGranted(true); // ✅ Autorizza la vincita					  
+					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
 					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 				    }}
 				  >
