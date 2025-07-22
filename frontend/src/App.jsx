@@ -26,6 +26,7 @@ function GameContainer() {
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
+  const SPIN_COST = 10000;
 
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
@@ -215,7 +216,7 @@ function GameContainer() {
 	  
       console.log("📩 Messaggio ricevuto da iframe:", data);
 	  
- 	  if (data.type === "SPIN_REQUEST") {
+	  if (data.type === "SPIN_REQUEST") {
 	    try {
 		  const latestRes = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${account.address}`);
 		  const latestData = await latestRes.json();
@@ -223,8 +224,8 @@ function GameContainer() {
 
 		  if (latestBalance < SPIN_COST) {
 		    toast.error("Spin negato: saldo insufficiente.");
-		    await loadSlotBalance(account.address); // ✅ aggiorna UI
-		    return; // ✅ non mandare nulla all’iframe
+		    await loadSlotBalance(account.address);
+		    return; // ⛔ NON inviare messaggi all'iframe
 		  }
 
 		  const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/spin", {
@@ -234,10 +235,10 @@ function GameContainer() {
 		  });
 
 		  if (!res.ok) {
-		    const data = await res.json();
-		    toast.error(`Spin negato: ${data.message}`);
-		    await loadSlotBalance(account.address); // ✅ aggiorna UI
-		    return; // ✅ non mandare nulla all’iframe
+		    const data = await res.json().catch(() => ({}));
+		    toast.error(`Spin negato: ${data.message || "errore sconosciuto"}`);
+		    await loadSlotBalance(account.address);
+		    return; // ⛔ NON inviare messaggi all'iframe
 		  }
 
 		  const data = await res.json();
@@ -245,12 +246,15 @@ function GameContainer() {
 		  postBalanceToGame(data.newBalance);
 		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
 		  setLastSpinGranted(true);
+
 	    } catch (err) {
 		  console.error("Errore durante spin:", err);
 		  toast.error("Errore imprevisto durante lo spin");
-		  return; // ✅ niente messaggio all’iframe
+		  await loadSlotBalance(account.address);
+		  return; // ⛔ NON inviare messaggi all'iframe
 	    }
 	  }
+
 
 	  if (data.type === "SPIN_WIN") {
 	    const amount = Number(data.amount || 0);
