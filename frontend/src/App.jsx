@@ -397,12 +397,13 @@ function GameContainer() {
 			    <div className="tooltip-container">
 				  <button
 				    className="btn btn-free-spin btn-highspin glow-effect"
-				    onClick={async () => {	
+				    onClick={async () => {
 					  const ok = await checkBackendBalanceOk();
 					  if (!ok) {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
+
 					  try {
 					    const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
 						  method: "POST",
@@ -411,20 +412,27 @@ function GameContainer() {
 					    });
 
 					    const result = await res.json();
+
 					    if (res.ok) {
+						  // ✅ Solo se il backend ha autorizzato lo spin
+						  const iframe = document.querySelector("iframe");
+						  if (!iframe || !iframe.contentWindow) {
+						    toast.error("Slot non disponibile");
+						    return;
+						  }
+
 						  lastSpinGrantedRef.current = true;
+						  iframe.contentWindow.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 						  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
-						  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
-						  setHighBalanceCanSpin(false);
+
+						  setHighBalanceCanSpin(false); // ✅ Nascondi solo quando lo spin parte DAVVERO
 					    } else {
 						  toast.error(result.message || "Error using whale spin");
-						  //setHighBalanceCanSpin(false); // 👈 nasconde il bottone se lo spin è stato già usato
 					    }
 					  } catch (err) {
 					    console.error("Error using whale spin:", err);
 					    toast.error("Unexpected error");
 					  }
-
 				    }}
 				  >
 				    🐳
@@ -432,7 +440,6 @@ function GameContainer() {
 				  <span className="tooltip-text">Whale FREE spin</span>
 			    </div>
 			  )}
-
 			</div>
           </>
         ) : (
