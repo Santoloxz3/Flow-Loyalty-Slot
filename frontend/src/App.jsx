@@ -418,6 +418,7 @@ function GameContainer() {
 						  setHighBalanceCanSpin(false);
 					    } else {
 						  toast.error(result.message || "Error using whale spin");
+						  setHighBalanceCanSpin(false); // 👈 nasconde il bottone se lo spin è stato già usato
 					    }
 					  } catch (err) {
 					    console.error("Error using whale spin:", err);

@@ -36,7 +36,7 @@ export async function highBalanceSpinHandler(req, res) {
     }
 
     if (existing?.used_spin) {
-      return res.status(403).json({ message: "Spin già usato oggi" });
+      return res.status(403).json({ message: "Spin already used today" });
     }
 
     const { error } = await supabase.from("high_balance_spin").upsert({
