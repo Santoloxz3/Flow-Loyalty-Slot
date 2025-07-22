@@ -233,11 +233,36 @@ function GameContainer() {
 	    }
 
 	    const SPIN_COST = 10000;
-	    if (slotBalance < SPIN_COST) {
-		  event.source?.postMessage({ type: "SPIN_DENIED", reason: "Insufficient balance" }, "*");
-		  return;
-	    }
+		try {
+		  const latestRes = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${account.address}`);
+		  const latestData = await latestRes.json();
+		  const latestBalance = latestData.balance ?? 0;
 
+		  if (latestBalance < SPIN_COST) {
+			event.source?.postMessage({ type: "SPIN_DENIED", reason: "Insufficient balance" }, "*");
+			return;
+		  }
+
+		  const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/spin", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
+		  });
+
+		  if (!res.ok) {
+			const data = await res.json();
+			event.source?.postMessage({ type: "SPIN_DENIED", reason: data.message }, "*");
+			return;
+		  }
+
+		  const data = await res.json();
+		  setSlotBalance(data.newBalance);
+		  postBalanceToGame(data.newBalance);
+		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
+		} catch (err) {
+		  console.error("Spin error:", err);
+		  event.source?.postMessage({ type: "SPIN_DENIED", reason: "Errore imprevisto" }, "*");
+		}
 	    try {
 		  const newBalance = slotBalance - SPIN_COST;
 		  await fetch("https://flow-loyalty-backend.onrender.com/balance/set", {
