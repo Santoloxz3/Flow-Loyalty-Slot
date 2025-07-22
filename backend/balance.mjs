@@ -8,7 +8,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 // GET /balance?wallet=...
 router.get("/", async (req, res) => {
   const wallet = req.query.wallet;
-  if (!wallet) return res.status(400).json({ message: "Wallet richiesto" });
+  if (!wallet) return res.status(400).json({ message: "Wallet required" });
 
   const { data, error } = await supabase
     .from("balances")
@@ -17,7 +17,7 @@ router.get("/", async (req, res) => {
     .single();
 
   if (error && error.code !== "PGRST116") {
-    return res.status(500).json({ message: "Errore Supabase", error });
+    return res.status(500).json({ message: "Error Supabase", error });
   }
 
   return res.json({ balance: data?.balance ?? 0 });
@@ -27,7 +27,7 @@ router.get("/", async (req, res) => {
 router.post("/update", async (req, res) => {
   const { wallet, amountToAdd } = req.body;
   if (!wallet || typeof amountToAdd !== "number") {
-    return res.status(400).json({ message: "Dati mancanti" });
+    return res.status(400).json({ message: "Missing data" });
   }
 
   const { data: existing } = await supabase
@@ -51,7 +51,7 @@ router.post("/update", async (req, res) => {
 router.post("/set", async (req, res) => {
   const { wallet, newBalance } = req.body;
   if (!wallet || typeof newBalance !== "number") {
-    return res.status(400).json({ message: "Dati mancanti" });
+    return res.status(400).json({ message: "Missing data" });
   }
 
   await supabase.from("balances").update({ balance: newBalance }).eq("wallet", wallet);
@@ -62,7 +62,7 @@ router.post("/set", async (req, res) => {
 router.post("/spin", async (req, res) => {
   const { wallet, cost } = req.body;
   if (!wallet || typeof cost !== "number") {
-    return res.status(400).json({ message: "Dati mancanti" });
+    return res.status(400).json({ message: "Missing data" });
   }
 
   const { data: existing, error } = await supabase
@@ -72,11 +72,11 @@ router.post("/spin", async (req, res) => {
     .single();
 
   if (error || !existing) {
-    return res.status(400).json({ message: "Saldo non trovato" });
+    return res.status(400).json({ message: "Balance not found" });
   }
 
   if (existing.balance < cost) {
-    return res.status(403).json({ message: "Saldo insufficiente" });
+    return res.status(403).json({ message: "Insufficient balance" });
   }
 
   const newBalance = existing.balance - cost;
@@ -87,7 +87,7 @@ router.post("/spin", async (req, res) => {
     .eq("wallet", wallet);
 
   if (updateError) {
-    return res.status(500).json({ message: "Errore aggiornamento saldo" });
+    return res.status(500).json({ message: "Balance update error" });
   }
 
   return res.json({ newBalance });

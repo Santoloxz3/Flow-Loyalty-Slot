@@ -154,7 +154,7 @@ function GameContainer() {
 
 
   const handleDeposit = async () => {
-    if (!connected || !account?.address) return toast.error("Connettiti al wallet.");
+    if (!connected || !account?.address) return toast.error("Connect to the wallet");
     const amount = depositMultiplier * 10000;
     const amountBigInt = BigInt(amount * 1e9);
     setLoading(true);
@@ -224,7 +224,7 @@ function GameContainer() {
 		  const latestBalance = latestData.balance ?? 0;
           const SPIN_COST = 10000;
 		  if (latestBalance < SPIN_COST) {
-		    toast.error("Spin negato: saldo insufficiente.");
+		    toast.error("Invalid spin due to insufficient balance.");
 		    await loadSlotBalance(account.address);
 		    return;
 		  }
@@ -240,13 +240,13 @@ function GameContainer() {
 		    data = await res.json(); // parsing protetto
 		  } catch (parseErr) {
 		    console.error("❌ Errore parsing JSON:", parseErr);
-		    toast.error("Risposta non valida dal server.");
+		    toast.error("Invalid response from the server");
 		    await loadSlotBalance(account.address);
 		    return;
 		  }
 
 		  if (!res.ok) {
-		    toast.error(`Spin negato: ${data.message || "Errore sconosciuto"}`);
+		    toast.error(`Spin denied: ${data.message || "Unknown error"}`);
 		    await loadSlotBalance(account.address);
 		    return;
 		}
@@ -258,7 +258,7 @@ function GameContainer() {
 
 	    } catch (err) {
 		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
-		  toast.error("Errore imprevisto durante lo spin");
+		  toast.error("Unexpected error during spin.");
 		  await loadSlotBalance(account.address);
 		  return;
 	    }
@@ -287,7 +287,6 @@ function GameContainer() {
 		  setTimeout(() => {
 		    setGlowWin(false);
 		  }, 2000);
-
 		  setSpinLog((prev) => [...prev, `✅ Win: +${amount} $FLOW`]);
 		  await updateSlotBalance(account.address, amount);
 	    } else {
