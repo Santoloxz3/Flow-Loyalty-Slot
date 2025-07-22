@@ -256,10 +256,6 @@ function GameContainer() {
 		  console.log("✅ SPIN_GRANTED autorizzato");
 		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
 		  lastSpinGrantedRef.current = true;
-		  
-          if (data.source === "FREE_SPIN_BAL") {
-            setHighBalanceCanSpin(false);
-          } 
 
 	    } catch (err) {
 		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
@@ -335,7 +331,7 @@ function GameContainer() {
 
 		  const result = await res.json();
 		  if (res.ok) {
-		    
+		    setHighBalanceCanSpin(false);
 		  } else {
 		    toast.error(result.message || "Error using token spin");
 		  }
@@ -401,44 +397,15 @@ function GameContainer() {
 			    <div className="tooltip-container">
 				  <button
 				    className="btn btn-free-spin btn-highspin glow-effect"
-				    onClick={async () => {
+				    onClick={async () => {	
 					  const ok = await checkBackendBalanceOk();
 					  if (!ok) {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-
-					  try {
-					    const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
-						  method: "POST",
-						  headers: { "Content-Type": "application/json" },
-						  body: JSON.stringify({ wallet: account.address }),
-					    });
-
-					    const result = await res.json();
-
-					    if (res.ok) {
-						  const iframe = document.querySelector("iframe");
-						  if (!iframe || !iframe.contentWindow) {
-						    toast.error("Slot non disponibile");
-						    return; // 🔴 STOP: non far partire nulla
-						  }
-
-						  // ✅ solo ora consideriamo lo spin effettivo
-						  lastSpinGrantedRef.current = true;
-						  iframe.contentWindow.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL", source: "FREE_SPIN_BAL" }, "*");
-
-						  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
-
-					    } else {
-						  toast.error(result.message || "Error using whale spin");
-						  // NON nascondere il bottone: lascia che l'utente riprovi
-					    }
-					  } catch (err) {
-					    console.error("Error using whale spin:", err);
-					    toast.error("Unexpected error");
-					    // NON nascondere il bottone
-					  }
+					  lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
+					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
+					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 				    }}
 				  >
 				    🐳
