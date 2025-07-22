@@ -414,24 +414,26 @@ function GameContainer() {
 					    const result = await res.json();
 
 					    if (res.ok) {
-						  // ✅ Solo se il backend ha autorizzato lo spin
 						  const iframe = document.querySelector("iframe");
 						  if (!iframe || !iframe.contentWindow) {
 						    toast.error("Slot non disponibile");
-						    return;
+						    return; // 🔴 STOP: non far partire nulla
 						  }
 
+						  // ✅ solo ora consideriamo lo spin effettivo
 						  lastSpinGrantedRef.current = true;
 						  iframe.contentWindow.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 						  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
 
-						  setHighBalanceCanSpin(false); // ✅ Nascondi solo quando lo spin parte DAVVERO
+						  setHighBalanceCanSpin(false); // ✅ Nascondi solo dopo che è stato inviato correttamente
 					    } else {
 						  toast.error(result.message || "Error using whale spin");
+						  // NON nascondere il bottone: lascia che l'utente riprovi
 					    }
 					  } catch (err) {
 					    console.error("Error using whale spin:", err);
 					    toast.error("Unexpected error");
+					    // NON nascondere il bottone
 					  }
 				    }}
 				  >
@@ -440,6 +442,7 @@ function GameContainer() {
 				  <span className="tooltip-text">Whale FREE spin</span>
 			    </div>
 			  )}
+
 			</div>
           </>
         ) : (
