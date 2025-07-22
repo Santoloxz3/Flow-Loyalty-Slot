@@ -373,6 +373,7 @@ function GameContainer() {
 					  toast.error("Reward wallet empty. Please wait for refill.");
 					  return;
 					}
+					setLastSpinGranted(true); // ✅ Autorizza vincita da NFT
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
@@ -404,6 +405,7 @@ function GameContainer() {
 					    return;
 					  }
 					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
+					  setLastSpinGranted(true); // ✅ Autorizza la prossima SPIN_WIN
 					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 				    }}
 				  >
