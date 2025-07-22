@@ -403,9 +403,27 @@ function GameContainer() {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-					  lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
-					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
-					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+					  try {
+					    const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
+						  method: "POST",
+						  headers: { "Content-Type": "application/json" },
+						  body: JSON.stringify({ wallet: account.address }),
+					    });
+
+					    const result = await res.json();
+					    if (res.ok) {
+						  lastSpinGrantedRef.current = true;
+						  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
+						  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+						  setHighBalanceCanSpin(false);
+					    } else {
+						  toast.error(result.message || "Error using whale spin");
+					    }
+					  } catch (err) {
+					    console.error("Error using whale spin:", err);
+					    toast.error("Unexpected error");
+					  }
+
 				    }}
 				  >
 				    🐳
