@@ -256,6 +256,10 @@ function GameContainer() {
 		  console.log("✅ SPIN_GRANTED autorizzato");
 		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
 		  lastSpinGrantedRef.current = true;
+		  
+          if (data.source === "FREE_SPIN_BAL") {
+            setHighBalanceCanSpin(false);
+          } 
 
 	    } catch (err) {
 		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
@@ -331,7 +335,7 @@ function GameContainer() {
 
 		  const result = await res.json();
 		  if (res.ok) {
-		    setHighBalanceCanSpin(false);
+		    
 		  } else {
 		    toast.error(result.message || "Error using token spin");
 		  }
@@ -422,10 +426,10 @@ function GameContainer() {
 
 						  // ✅ solo ora consideriamo lo spin effettivo
 						  lastSpinGrantedRef.current = true;
-						  iframe.contentWindow.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+						  iframe.contentWindow.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL", source: "FREE_SPIN_BAL" }, "*");
+
 						  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
 
-						  setHighBalanceCanSpin(false); // ✅ Nascondi solo dopo che è stato inviato correttamente
 					    } else {
 						  toast.error(result.message || "Error using whale spin");
 						  // NON nascondere il bottone: lascia che l'utente riprovi
