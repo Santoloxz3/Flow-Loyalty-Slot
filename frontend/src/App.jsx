@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
 import "@suiet/wallet-kit/style.css";
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
@@ -26,7 +26,7 @@ function GameContainer() {
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
-  const [lastSpinGranted, setLastSpinGranted] = useState(false);
+  const lastSpinGrantedRef = useRef(false);
  
 
   const postBalanceToGame = (balance) => {
@@ -265,11 +265,11 @@ function GameContainer() {
 	  }
 
 	  if (data.type === "SPIN_WIN") {
-	    if (!lastSpinGranted) {
+	    if (!lastSpinGrantedRef.current) {
 		  console.warn("⚠️ SPIN_WIN ricevuto senza autorizzazione. Ignorato.");
 		  return;
 	    }
-	    setLastSpinGranted(false); // reset		  
+	    lastSpinGrantedRef.current = false;	  
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
 	      const winAudio = new Audio("/slot/win-sound.wav");
@@ -371,7 +371,7 @@ function GameContainer() {
 					  toast.error("Reward wallet empty. Please wait for refill.");
 					  return;
 					}
-                    setLastSpinGranted(true); // ✅ AUTORIZZA PRIMA DEL MESSAGGIO					
+                    lastSpinGrantedRef.current = true;; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO					
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
@@ -402,7 +402,7 @@ function GameContainer() {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-					  setLastSpinGranted(true); // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
+					  lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
 					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
 					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 				    }}
