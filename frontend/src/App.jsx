@@ -225,7 +225,7 @@ function GameContainer() {
 		  if (latestBalance < SPIN_COST) {
 		    toast.error("Spin negato: saldo insufficiente.");
 		    await loadSlotBalance(account.address);
-		    return; // ⛔ NON inviare messaggi all'iframe
+		    return;
 		  }
 
 		  const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/spin", {
@@ -234,26 +234,35 @@ function GameContainer() {
 		    body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
 		  });
 
-		  if (!res.ok) {
-		    const data = await res.json().catch(() => ({}));
-		    toast.error(`Spin negato: ${data.message || "errore sconosciuto"}`);
+		  let data;
+		  try {
+		    data = await res.json(); // parsing protetto
+		  } catch (parseErr) {
+		    console.error("❌ Errore parsing JSON:", parseErr);
+		    toast.error("Risposta non valida dal server.");
 		    await loadSlotBalance(account.address);
-		    return; // ⛔ NON inviare messaggi all'iframe
+		    return;
 		  }
 
-		  const data = await res.json();
+		  if (!res.ok) {
+		    toast.error(`Spin negato: ${data.message || "Errore sconosciuto"}`);
+		    await loadSlotBalance(account.address);
+		    return;
+		}
+
 		  setSlotBalance(data.newBalance);
 		  postBalanceToGame(data.newBalance);
 		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
 		  setLastSpinGranted(true);
 
 	    } catch (err) {
-		  console.error("Errore durante spin:", err);
+		  console.error("❌ Errore durante spin:", err);
 		  toast.error("Errore imprevisto durante lo spin");
 		  await loadSlotBalance(account.address);
-		  return; // ⛔ NON inviare messaggi all'iframe
+		  return;
 	    }
 	  }
+
 
 
 	  if (data.type === "SPIN_WIN") {
