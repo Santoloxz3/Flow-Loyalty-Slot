@@ -26,7 +26,7 @@ function GameContainer() {
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
-  const SPIN_COST = 10000;
+  
 
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
@@ -221,7 +221,7 @@ function GameContainer() {
 		  const latestRes = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${account.address}`);
 		  const latestData = await latestRes.json();
 		  const latestBalance = latestData.balance ?? 0;
-
+          const SPIN_COST = 10000;
 		  if (latestBalance < SPIN_COST) {
 		    toast.error("Spin negato: saldo insufficiente.");
 		    await loadSlotBalance(account.address);
