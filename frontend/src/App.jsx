@@ -304,6 +304,7 @@ function GameContainer() {
       console.log("✅ React ha ricevuto FREE_SPIN_USED, sto aggiornando Supabase");
 
 	  if (data.type === "FREE_SPIN_USED_NFT") {
+		setLastSpinGranted(true);  
 	    try {
 		  const res = await fetch("https://flow-loyalty-backend.onrender.com/free-spin", {
 		    method: "POST",
@@ -323,6 +324,7 @@ function GameContainer() {
 	  }
 
 	  if (data.type === "FREE_SPIN_USED_BAL") {
+		setLastSpinGranted(true);  
 	    try {
 		  const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
 		    method: "POST",
@@ -372,8 +374,7 @@ function GameContainer() {
 					if (!ok) {
 					  toast.error("Reward wallet empty. Please wait for refill.");
 					  return;
-					}
-					setLastSpinGranted(true); // ✅ Autorizza vincita da NFT
+					}					
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
@@ -404,8 +405,7 @@ function GameContainer() {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
-					  setLastSpinGranted(true); // ✅ Autorizza la prossima SPIN_WIN
+					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
 					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
 				    }}
 				  >
