@@ -256,7 +256,7 @@ function GameContainer() {
 		  setLastSpinGranted(true);
 
 	    } catch (err) {
-		  console.error("❌ Errore durante spin:", err);
+		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
 		  toast.error("Errore imprevisto durante lo spin");
 		  await loadSlotBalance(account.address);
 		  return;
