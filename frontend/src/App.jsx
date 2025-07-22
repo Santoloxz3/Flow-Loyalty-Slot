@@ -215,75 +215,42 @@ function GameContainer() {
 	  
       console.log("📩 Messaggio ricevuto da iframe:", data);
 	  
-	  if (data.type === "SPIN_REQUEST") {
+ 	  if (data.type === "SPIN_REQUEST") {
 	    try {
-		  const backendRes = await fetch("https://flow-loyalty-backend.onrender.com/check-backend-balance");
-		  const backendData = await backendRes.json();
-
-		  const backendBalance = BigInt(backendData.balance || "0");
-		  const MIN_REQUIRED = 50_000_000_000_000n;
-
-		  if (backendBalance < MIN_REQUIRED) {
-		    toast.warning("The reward wallet is currently out of funds. Will be refilled soon.");
-		    // Ma lasciamo proseguire lo spin normalmente
-		  }
-	    } catch (err) {
-		  console.error("❌ Errore durante verifica saldo backend:", err);
-		  toast.error("Error checking reward funds.");
-	    }
-
-	    const SPIN_COST = 10000;
-		try {
 		  const latestRes = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${account.address}`);
 		  const latestData = await latestRes.json();
 		  const latestBalance = latestData.balance ?? 0;
 
 		  if (latestBalance < SPIN_COST) {
-			event.source?.postMessage({ type: "SPIN_DENIED", reason: "Insufficient balance" }, "*");
-			return;
+		    toast.error("Spin negato: saldo insufficiente.");
+		    await loadSlotBalance(account.address); // ✅ aggiorna UI
+		    return; // ✅ non mandare nulla all’iframe
 		  }
 
 		  const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/spin", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
+		    method: "POST",
+		    headers: { "Content-Type": "application/json" },
+		    body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
 		  });
 
 		  if (!res.ok) {
-			const data = await res.json();
-			event.source?.postMessage({ type: "SPIN_DENIED", reason: data.message }, "*");
-			return;
+		    const data = await res.json();
+		    toast.error(`Spin negato: ${data.message}`);
+		    await loadSlotBalance(account.address); // ✅ aggiorna UI
+		    return; // ✅ non mandare nulla all’iframe
 		  }
 
 		  const data = await res.json();
 		  setSlotBalance(data.newBalance);
 		  postBalanceToGame(data.newBalance);
 		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
-		} catch (err) {
-		  console.error("Spin error:", err);
-		  event.source?.postMessage({ type: "SPIN_DENIED", reason: "Errore imprevisto" }, "*");
-		}
-	    try {
-		  const newBalance = slotBalance - SPIN_COST;
-		  await fetch("https://flow-loyalty-backend.onrender.com/balance/set", {
-		    method: "POST",
-		    headers: { "Content-Type": "application/json" },
-		    body: JSON.stringify({ wallet: account.address, newBalance }),
-		  });
-		  
-		  setSlotBalance(newBalance);
-		  postBalanceToGame(newBalance);
-		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance }, "*");
-		  		 
+		  setLastSpinGranted(true);
 	    } catch (err) {
-		  console.error("Unexpected error during spin:", err);
-		  event.source?.postMessage({ type: "SPIN_DENIED", reason: "Errore imprevisto" }, "*");
+		  console.error("Errore durante spin:", err);
+		  toast.error("Errore imprevisto durante lo spin");
+		  return; // ✅ niente messaggio all’iframe
 	    }
-
-	    return;
 	  }
-
-
 
 	  if (data.type === "SPIN_WIN") {
 	    const amount = Number(data.amount || 0);
