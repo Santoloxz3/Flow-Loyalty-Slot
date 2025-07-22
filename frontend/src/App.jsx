@@ -253,8 +253,9 @@ function GameContainer() {
 
 		  setSlotBalance(data.newBalance);
 		  postBalanceToGame(data.newBalance);
+		  console.log("✅ SPIN_GRANTED autorizzato");
 		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
-		  setLastSpinGranted(true);
+		  lastSpinGrantedRef.current = true;
 
 	    } catch (err) {
 		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
