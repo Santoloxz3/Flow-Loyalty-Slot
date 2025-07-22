@@ -264,46 +264,33 @@ function GameContainer() {
 	    }
 	  }
 
-
-
 	  if (data.type === "SPIN_WIN") {
 	    if (!lastSpinGranted) {
 		  console.warn("⚠️ SPIN_WIN ricevuto senza autorizzazione. Ignorato.");
 		  return;
 	    }
+	    setLastSpinGranted(false); // reset		  
+	    const amount = Number(data.amount || 0);
+	    if (amount > 0) {
+	      const winAudio = new Audio("/slot/win-sound.wav");
+		  winAudio.play();
 
-	    console.log("💰 Vincita ricevuta:", data.amount);
+	  	  setFlashWin(true);
+		  setGlowWin(true);
 
-	    try {
-		  const response = await fetch("https://flow-loyalty-backend.onrender.com/balance/update", {
-		    method: "POST",
-		    headers: { "Content-Type": "application/json" },
-		    body: JSON.stringify({
-			  wallet: account.address,
-			  amountToAdd: data.amount,
-		    }),
-		  });
+		  setTimeout(() => {
+		    setFlashWin(false);
+		  }, 1000);
 
-		  if (!response.ok) {
-		    const errorData = await response.json().catch(() => ({}));
-		    console.error("❌ Errore nella risposta API:", errorData);
-		    toast.error("Errore durante l'aggiornamento del saldo.");
-		    return;
-		  }
-
-		  const result = await response.json();
-		  console.log("✅ Aggiornato saldo con vincita:", result.balance);
-
-		  setBalance(result.balance);
-		  sendBalanceToGame(result.balance);
-	    } catch (error) {
-		  console.error("❌ Errore aggiornamento saldo vincita:", error);
-		  toast.error("Errore durante aggiornamento vincita.");
-	    } finally {
-		  setLastSpinGranted(false); // Reset autorizzazione spin
+		  setTimeout(() => {
+		    setGlowWin(false);
+		  }, 2000);
+		  setSpinLog((prev) => [...prev, `✅ Win: +${amount} $FLOW`]);
+		  await updateSlotBalance(account.address, amount);
+	    } else {
+		  setSpinLog((prev) => [...prev, `❌ No Win`]);
 	    }
 	  }
-
 
 
 	  if (data.type === "REQUEST_BALANCE") {
