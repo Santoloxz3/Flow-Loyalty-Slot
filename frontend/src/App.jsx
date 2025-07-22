@@ -26,7 +26,8 @@ function GameContainer() {
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
-  
+  const [lastSpinGranted, setLastSpinGranted] = useState(false);
+ 
 
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
@@ -266,6 +267,11 @@ function GameContainer() {
 
 
 	  if (data.type === "SPIN_WIN") {
+	    if (!lastSpinGranted) {
+		  console.warn("⚠️ SPIN_WIN ricevuto senza autorizzazione. Ignorato.");
+		  return;
+	    }
+	    setLastSpinGranted(false); // reset		  
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
 	      const winAudio = new Audio("/slot/win-sound.wav");
