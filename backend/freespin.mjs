@@ -71,7 +71,7 @@ async function freeSpinHandler(req, res) {
 	}
 
 	if (!targetNFT) {
-	  return res.status(403).json({ message: "Nessuno spin disponibile" });
+	  return res.status(403).json({ message: "no spins available" });
 	}
 
 	// Step 3: aggiorna su Supabase (usiamo upsert atomico)
@@ -90,7 +90,7 @@ async function freeSpinHandler(req, res) {
 
 	if (upsertError) {
 	  console.error("❌ Errore durante l'upsert:", upsertError);
-	  return res.status(500).json({ message: "Errore durante l'uso dello spin" });
+	  return res.status(500).json({ message: "Error while using spin" });
 	}
 
 	console.log(`🎯 Spin usato su ${targetNFT.object_id}: ${newUsedSpins}/${targetNFT.spins_per_day}`);
@@ -109,7 +109,7 @@ async function freeSpinHandler(req, res) {
 	  return sum + Math.max(0, nft.spins_per_day - used);
 	}, 0);
 
-	return res.json({ message: "Spin utilizzato", spinsLeft: totalLeftAfter });
+	return res.json({ message: "Spin used", spinsLeft: totalLeftAfter });
 
 
   } catch (err) {
