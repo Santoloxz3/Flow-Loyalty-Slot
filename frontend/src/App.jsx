@@ -192,6 +192,7 @@ function GameContainer() {
   useEffect(() => {
     const handleFirstClick = () => {
 	  if (backgroundMusicRef.current) {
+		backgroundMusicRef.current.volume = 0.2;  
 	    backgroundMusicRef.current.play().catch((err) => {
 		  console.warn("⚠️ Autoplay bloccato o fallito:", err);
 	    });
