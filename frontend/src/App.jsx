@@ -27,6 +27,7 @@ function GameContainer() {
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
   const lastSpinGrantedRef = useRef(false);
+  const backgroundMusicRef = useRef(null);
  
 
   const postBalanceToGame = (balance) => {
@@ -187,6 +188,23 @@ function GameContainer() {
     { src: "/slot/images/Flow1.png", payout: " 30000 $FLOW" },
     { src: "/slot/images/jolly1.png", payout: "👑 100000 $FLOW" },	
   ];
+
+  useEffect(() => {
+    const handleFirstClick = () => {
+	  if (backgroundMusicRef.current) {
+	    backgroundMusicRef.current.play().catch((err) => {
+		  console.warn("⚠️ Autoplay bloccato o fallito:", err);
+	    });
+	  }
+	  document.removeEventListener("click", handleFirstClick);
+    };
+
+    document.addEventListener("click", handleFirstClick);
+
+    return () => {
+	  document.removeEventListener("click", handleFirstClick);
+    };
+  }, []);
 
 
 
@@ -356,6 +374,7 @@ function GameContainer() {
     <div className="app-container">
       <div className="left-panel">
         <ConnectButton />
+	    <audio ref={backgroundMusicRef} src="/slot/flow-theme.mp3" loop />
         {isWalletReady ? (
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
