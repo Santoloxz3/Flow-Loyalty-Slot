@@ -403,13 +403,31 @@ function GameContainer() {
 					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-					  lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
-					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
-					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+
+					  // Verifica lato backend se può ancora spinare
+					  try {
+					    const res = await fetch(`https://flow-loyalty-backend.onrender.com/high-balance-spin?wallet=${account.address}`);
+					    const data = await res.json();
+
+					    if (!res.ok || !data.canSpin) {
+						  toast.error("Spin already used today");
+						  setHighBalanceCanSpin(false); // Nascondi il pulsante
+						  return;
+					    }
+
+					    lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
+					    console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
+					    document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+
+					  } catch (err) {
+					    console.error("Errore durante il check dello spin:", err);
+					    toast.error("Errore durante la verifica dello spin");
+					  }
 				    }}
 				  >
 				    🐳
 				  </button>
+
 				  <span className="tooltip-text">Whale FREE spin</span>
 			    </div>
 			  )}
@@ -431,7 +449,7 @@ function GameContainer() {
         <div className="slot-frame-wrapper">
           <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
 		  <iframe
-		    title="Slot Game"
+		    title="Flow Loyalty Slot"
 		    src="/slot/index.html"
 		    className="game-frame"
 		    onLoad={() => {
