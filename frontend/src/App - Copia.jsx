@@ -12,10 +12,6 @@ const client = new SuiClient({ url: SUI_NODE_URL });
 
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
-function isNightlyMobile() {
-  return /Nightly/i.test(navigator.userAgent) && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
-}
-
 
 function GameContainer() {
   const { connected, account, signAndExecuteTransactionBlock, signMessage } = useWallet();
@@ -173,13 +169,7 @@ function GameContainer() {
       const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
       tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
 
-      if (isNightlyMobile()) {
-        console.log("📱 Nightly Mobile rilevato – uso sign + execute separati");
-        const signedTx = await signTransactionBlock({ transactionBlock: tx });
-        await client.executeTransactionBlock({ transactionBlock: signedTx });
-      } else {
-        await signAndExecuteTransactionBlock({ transactionBlock: tx });
-      }
+      await signAndExecuteTransactionBlock({ transactionBlock: tx });
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
       toast.success(`Deposit completed: ${amount} $FLOW`);
