@@ -176,7 +176,10 @@ function GameContainer() {
       if (isNightlyMobile()) {
         console.log("📱 Nightly Mobile rilevato – uso sign + execute separati");
         const signedTx = await signTransactionBlock({ transactionBlock: tx });
-        await client.executeTransactionBlock({ transactionBlock: signedTx });
+		await client.executeTransactionBlock({
+		  transactionBlock: signedTx.transactionBlockBytes,
+		  signature: signedTx.signature,
+		});
       } else {
         await signAndExecuteTransactionBlock({ transactionBlock: tx });
       }
