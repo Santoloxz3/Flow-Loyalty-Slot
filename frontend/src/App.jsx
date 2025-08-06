@@ -18,7 +18,7 @@ function isNightlyMobile() {
 
 
 function GameContainer() {
-  const { connected, account, signAndExecuteTransactionBlock, signMessage } = useWallet();
+  const { connected, account, signAndExecuteTransactionBlock, signTransactionBlock, signMessage } = useWallet();
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [depositMultiplier, setDepositMultiplier] = useState(1);
   const [slotBalance, setSlotBalance] = useState(0);
