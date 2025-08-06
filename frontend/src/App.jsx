@@ -173,21 +173,24 @@ function GameContainer() {
       const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
       tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
 
-      if (isNightlyMobile()) {
-        console.log("📱 Nightly Mobile rilevato – uso sign + execute separati");
-        const signedTx = await signTransactionBlock({ transactionBlock: tx });
-		await client.executeTransactionBlock({
+	  if (isNightlyMobile()) {
+	    console.log("📱 Nightly Mobile rilevato – uso sign + execute separati");
+	    const signedTx = await signTransactionBlock({ transactionBlock: tx });
+	    const result = await client.executeTransactionBlock({
 		  transactionBlock: signedTx.transactionBlockBytes,
 		  signature: signedTx.signature,
-		});
-      } else {
-        await signAndExecuteTransactionBlock({ transactionBlock: tx });
-      }
+		  options: { showEffects: true }, // 👈 NECESSARIO
+	    });
+	    console.log("✅ Transazione eseguita:", result);
+	  } else {
+	    await signAndExecuteTransactionBlock({ transactionBlock: tx });
+	  }
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
       toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
-      toast.error("Error during deposit");
+      console.error("❌ Errore durante il deposito:", e);
+      toast.error("Error during deposit: " + (e?.message || "unknown error"));
     }
     setLoading(false);
   };
