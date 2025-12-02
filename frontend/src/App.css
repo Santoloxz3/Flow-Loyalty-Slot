@@ -173,7 +173,7 @@
   width: 100%;
   max-width: 900px;
   border-radius: 80px;
-  padding: 15px; /* spazio per il bordo */
+  padding: 0; /* spazio per il bordo */
   box-sizing: border-box;
 }
 
