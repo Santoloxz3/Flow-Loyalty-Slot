@@ -179,7 +179,7 @@
   right: 15px;    /* uguale al padding del wrapper */
   bottom: 15px;   /* uguale al padding del wrapper */
   border-radius: 80px;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
   background: linear-gradient(135deg, #ff00cc, #00ffff, #ffcc00, #ff00cc);
   background-size: 800% 800%;
