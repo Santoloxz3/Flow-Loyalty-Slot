@@ -179,10 +179,10 @@
 
 .animated-border-glow {
   position: absolute;
-  top: 4px;
-  left: 4px;
-  right: 4px;
-  bottom: 4px;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
   border-radius: 80px;
   z-index: 1;
   pointer-events: none;
