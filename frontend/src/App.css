@@ -170,28 +170,27 @@
 /* Cornice statica animata con bagliore */
 .slot-frame-wrapper {
   position: relative;
-  width: 800px;       /* uguale all'iframe */
-  height: 600px;      /* uguale all'iframe */
+  width: 100%;
+  max-width: 900px;
   border-radius: 80px;
+  padding: 15px; /* spazio per il bordo */
   box-sizing: border-box;
-  margin: 0 auto;     /* centra il wrapper */
-  overflow: visible;  /* evita tagli del glow */
 }
-
 
 .animated-border-glow {
   position: absolute;
-  top: -6px;     /* rimette il glow intorno uniforme */
-  left: -6px;
-  right: -6px;
-  bottom: -6px;
-  border-radius: 90px; /* un po' più grande per compensare il glow */
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 80px;
   z-index: 1;
   pointer-events: none;
+  border: 3px solid transparent;
   background: linear-gradient(135deg, #ff00cc, #00ffff, #ffcc00, #ff00cc);
   background-size: 800% 800%;
   animation: glowPulse 4s ease infinite;
-  filter: blur(14px);
+  filter: blur(10px);
   opacity: 0.9;
 }
 
@@ -211,24 +210,20 @@
   }
 }
 
-@media (max-width: 600px) {
-  .slot-frame-wrapper {
-    width: 100%;
-    height: auto;
-    padding: 8px;
-    border-radius: 32px;
+@media (max-width: 1024px) {
+  .app-container {
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
   }
-
-  .animated-border-glow {
-    top: -4px;
-    left: -4px;
-    right: -4px;
-    bottom: -4px;
-    border-radius: 40px;
-    filter: blur(8px);
+  .left-panel, .center-panel {
+    width: 100%;
+    max-width: 600px;
+  }
+  .game-frame {
+    height: 400px;
   }
 }
-
 .glow-win {
   background: linear-gradient(90deg, #00ff99, #ffff00, #ff0066, #00ff99);
   background-size: 800% 800%;
