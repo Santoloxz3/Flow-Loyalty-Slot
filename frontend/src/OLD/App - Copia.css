@@ -3,13 +3,14 @@
   gap: 5rem;
   padding: 2rem 4rem;
   min-height: 100vh;
-  background: url('/background-space.jpg') center/cover no-repeat;
+  background: url('/public/slot/background-space.jpg') center/cover no-repeat;
   box-sizing: border-box;
   justify-content: center;
   align-items: flex-start;
 }
 
 .left-panel {
+  margin-left: 3rem;
   flex: 0 0 500px;
   background: rgba(0, 0, 0, 0.6);
   padding: 1.8rem;
@@ -141,7 +142,7 @@
 
 .game-frame {
   position: relative;
-  width: 100%;
+  width: 800px;
   height: 600px;
   border: none;
   border-radius: 80px;
@@ -461,4 +462,58 @@
 .floating-info .btn-info:hover {
   background-color: #2980b9;
   transform: scale(1.08);
+}
+
+@media (max-width: 600px) {
+  .app-container {
+    padding: 1rem;
+    gap: 2rem;
+  }
+
+  .left-panel {
+    flex: 1;
+    margin-left: 0;
+    padding: 1rem;
+    border-radius: 32px;
+  }
+
+  .center-panel {
+    max-width: 100%;
+  }
+
+  .game-frame {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    border-radius: 32px;
+  }
+
+  .slot-frame-wrapper {
+    padding: 8px;
+    border-radius: 32px;
+  }
+
+  .app-title {
+    font-size: 2.2rem;
+    text-align: center;
+  }
+
+  .btn {
+    font-size: 1.4rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .btn-deposit,
+  .btn-withdraw,
+  .btn-free-spin,
+  .btn-log,
+  .btn-close {
+    font-size: 1.6rem;
+    padding: 0.8rem 1rem;
+  }
+
+  .wallet-box p:nth-child(2),
+  .wallet-box p:nth-child(3) {
+    font-size: 1.3rem;
+  }
 }

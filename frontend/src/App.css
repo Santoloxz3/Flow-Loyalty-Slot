@@ -170,29 +170,31 @@
 /* Cornice statica animata con bagliore */
 .slot-frame-wrapper {
   position: relative;
-  width: 100%;
-  max-width: 900px;
+  width: 800px;       /* uguale all'iframe */
+  height: 600px;      /* uguale all'iframe */
   border-radius: 80px;
-  padding: 15px; /* spazio per il bordo */
   box-sizing: border-box;
+  margin: 0 auto;     /* centra il wrapper */
+  overflow: visible;  /* evita tagli del glow */
 }
+
 
 .animated-border-glow {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border-radius: 80px;
+  top: -6px;     /* rimette il glow intorno uniforme */
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  border-radius: 90px; /* un po' più grande per compensare il glow */
   z-index: 1;
   pointer-events: none;
-  border: 3px solid transparent;
   background: linear-gradient(135deg, #ff00cc, #00ffff, #ffcc00, #ff00cc);
   background-size: 800% 800%;
   animation: glowPulse 4s ease infinite;
-  filter: blur(12px);
+  filter: blur(14px);
   opacity: 0.9;
 }
+
 
 @keyframes glowPulse {
   0% {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
 import "@suiet/wallet-kit/style.css";
 import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
@@ -10,12 +10,16 @@ import "./App.css";
 const SUI_NODE_URL = getFullnodeUrl("testnet");
 const client = new SuiClient({ url: SUI_NODE_URL });
 
-const MBLUB_COIN_TYPE = "0xd354912d329057e23693d5e8871926cdaa70fa00dfb26a50271868158bfc8f24::mutantblub::MUTANTBLUB";
+const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
+function isNightlyMobile() {
+  return /Nightly/i.test(navigator.userAgent) && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
+}
+
 
 function GameContainer() {
-  const { connected, account, signAndExecuteTransactionBlock, signMessage } = useWallet();
-  const [mblubBalance, setMblubBalance] = useState(null);
+  const { connected, account, signAndExecuteTransactionBlock, signTransactionBlock, signMessage } = useWallet();
+  const [FLOWBalance, setFLOWBalance] = useState(null);
   const [depositMultiplier, setDepositMultiplier] = useState(1);
   const [slotBalance, setSlotBalance] = useState(0);
   const [isWalletReady, setIsWalletReady] = useState(false);
@@ -26,6 +30,9 @@ function GameContainer() {
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
+  const lastSpinGrantedRef = useRef(false);
+  const backgroundMusicRef = useRef(null);
+ 
 
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
@@ -34,22 +41,22 @@ function GameContainer() {
   const fetchFreeSpins = async () => {
     if (!account?.address) return;
     try {
-      const res = await fetch(`http://localhost:3000/free-spin?wallet=${account.address}`);
+      const res = await fetch(`https://flow-loyalty-backend.onrender.com/free-spin?wallet=${account.address}`);
       const data = await res.json();
       setFreeSpinsLeft(data.spinsLeft ?? 0);
     } catch (err) {
-      console.error("Errore nel recupero spin gratuiti:", err);
+      console.error("Error retrieving free spins:", err);
     }
   };
 
   const fetchHighBalanceSpin = async () => {
     if (!account?.address) return;
     try {
-  	  const res = await fetch(`http://localhost:3000/high-balance-spin?wallet=${account.address}`);
+  	  const res = await fetch(`https://flow-loyalty-backend.onrender.com/high-balance-spin?wallet=${account.address}`);
 	  const data = await res.json();
 	  setHighBalanceCanSpin(data.canSpin ?? false);
     } catch (err) {
-	  console.error("Errore nel recupero dello spin high balance:", err);
+	  console.error("Error retrieving high balance spin:", err);
     }
   };
 
@@ -57,20 +64,20 @@ function GameContainer() {
 
   const loadSlotBalance = async (wallet) => {
     try {
-	  const res = await fetch(`http://localhost:3000/balance?wallet=${wallet}`);
+	  const res = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${wallet}`);
 	  const data = await res.json();
 	  const balance = data.balance ?? 0;
 	  setSlotBalance(balance);
 	  setTimeout(() => postBalanceToGame(balance), 2000);
     } catch (err) {
-	  console.error("Errore nel caricamento saldo:", err);
+	  console.error("Error loading balance:", err);
     }
   };
 
 
   const updateSlotBalance = async (wallet, amountToAdd) => {
     try {
-      const res = await fetch("http://localhost:3000/balance/update", {
+      const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet, amountToAdd }),
@@ -79,7 +86,7 @@ function GameContainer() {
       setSlotBalance(data.balance);
       postBalanceToGame(data.balance);
     } catch (err) {
-      console.error("Errore aggiornamento saldo:", err);
+      console.error("Error updating balance:", err);
     }
   };
 
@@ -87,16 +94,16 @@ function GameContainer() {
   const fetchBalances = async () => {
     try {
       const balances = await client.getAllBalances({ owner: account.address });
-      const mblub = balances.find((b) => b.coinType === MBLUB_COIN_TYPE);
-      setMblubBalance(mblub ? parseFloat(mblub.totalBalance) / 1e9 : 0);
+      const FLOW = balances.find((b) => b.coinType === FLOW_COIN_TYPE);
+      setFLOWBalance(FLOW ? parseFloat(FLOW.totalBalance) / 1e9 : 0);
       await loadSlotBalance(account.address);
     } catch (e) {
-      toast.error("Errore nel recupero saldi");
+      toast.error("Error fetching balances");
     }
   };
 
   const handleWithdraw = async () => {
-    if (!connected || !account?.address) return toast.error("Connettiti al wallet.");
+    if (!connected || !account?.address) return toast.error("Connect to the wallet.");
     setLoading(true);
     try {
       const nonce = Date.now().toString();
@@ -106,7 +113,7 @@ function GameContainer() {
       const signed = await signMessage({ message: encodedMessage });
       const publicKeyHex = [...account.publicKey].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-      const res = await fetch("http://localhost:3000/withdraw", {
+      const res = await fetch("https://flow-loyalty-backend.onrender.com/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet: account.address, message, signature: signed.signature, publicKey: publicKeyHex }),
@@ -114,14 +121,14 @@ function GameContainer() {
 
       const result = await res.json();
       if (res.ok) {
-        toast.success(`Prelievo completato: ${result.amount} MBLUB`);
+        toast.success(`Withdrawal completed: ${result.amount} $FLOW`);
         await loadSlotBalance(account.address);
         await fetchBalances();
       } else {
-        toast.error(result.message || "Errore durante il prelievo");
+        toast.error(result.message || "Error during withdrawal");
       }
     } catch (e) {
-      toast.error("Errore imprevisto durante il prelievo");
+      toast.error("Unexpected error during withdrawal");
     }
     setLoading(false);
   };
@@ -129,7 +136,7 @@ function GameContainer() {
   const handleUseHighBalanceSpin = () => {
     const iframe = document.querySelector("iframe");
     if (!iframe || !iframe.contentWindow) {
-	  toast.error("Slot non attiva.");
+	  toast.error("Slot not active.");
 	  return;
     }
 
@@ -139,10 +146,10 @@ function GameContainer() {
 
   const checkBackendBalanceOk = async () => {
     try {
-	  const res = await fetch("http://localhost:3000/check-backend-balance");
+	  const res = await fetch("https://flow-loyalty-backend.onrender.com/check-backend-balance");
 	  const data = await res.json();
 	  const backendBalance = BigInt(data.balance || "0");
-	  const MIN_REQUIRED = 10_000_000_000n;
+	  const MIN_REQUIRED = 50_000_000_000n; // 10 FLOW in nanos
 	  return backendBalance >= MIN_REQUIRED;
     } catch (err) {
 	  console.error("❌ Errore fetch backend balance:", err);
@@ -152,13 +159,13 @@ function GameContainer() {
 
 
   const handleDeposit = async () => {
-    if (!connected || !account?.address) return toast.error("Connettiti al wallet.");
+    if (!connected || !account?.address) return toast.error("Connect to the wallet");
     const amount = depositMultiplier * 10000;
     const amountBigInt = BigInt(amount * 1e9);
     setLoading(true);
     try {
-      const coins = await client.getCoins({ owner: account.address, coinType: MBLUB_COIN_TYPE });
-      if (!coins.data.length) return toast.error("Saldo insufficiente.");
+      const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
+      if (!coins.data.length) return toast.error("Insufficient balance.");
       const coinObjectId = coins.data[0].coinObjectId;
 
       const tx = new TransactionBlock();
@@ -166,12 +173,24 @@ function GameContainer() {
       const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
       tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
 
-      await signAndExecuteTransactionBlock({ transactionBlock: tx });
+	  if (isNightlyMobile()) {
+	    console.log("📱 Nightly Mobile rilevato – uso sign + execute separati");
+	    const signedTx = await signTransactionBlock({ transactionBlock: tx });
+	    const result = await client.executeTransactionBlock({
+		  transactionBlock: signedTx.transactionBlockBytes,
+		  signature: signedTx.signature,
+		  options: { showEffects: true }, // 👈 NECESSARIO
+	    });
+	    console.log("✅ Transazione eseguita:", result);
+	  } else {
+	    await signAndExecuteTransactionBlock({ transactionBlock: tx });
+	  }
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
-      toast.success(`Deposito effettuato: ${amount} MBLUB`);
+      toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
-      toast.error("Errore durante il deposito");
+      console.error("❌ Errore durante il deposito:", e);
+      toast.error("Error during deposit: " + (e?.message || "unknown error"));
     }
     setLoading(false);
   };
@@ -179,12 +198,30 @@ function GameContainer() {
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const simboliVincita = [
-    { src: "/images/Glass.png", payout: " 5000 $FLOW" },
-    { src: "/images/Moon.png", payout: " 10000 $FLOW" },
-    { src: "/images/Bag.png", payout: " 20000 $FLOW" },
-    { src: "/images/Flow1.png", payout: " 30000 $FLOW" },
-    { src: "/images/jolly1.png", payout: "👑 100000 $FLOW" },	
+    { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
+    { src: "/slot/images/Moon.png", payout: " 10000 $FLOW" },
+    { src: "/slot/images/Bag.png", payout: " 20000 $FLOW" },
+    { src: "/slot/images/Flow1.png", payout: " 30000 $FLOW" },
+    { src: "/slot/images/jolly1.png", payout: "👑 100000 $FLOW" },	
   ];
+
+  useEffect(() => {
+    const handleFirstClick = () => {
+	  if (backgroundMusicRef.current) {
+		backgroundMusicRef.current.volume = 0.2;  
+	    backgroundMusicRef.current.play().catch((err) => {
+		  console.warn("⚠️ Autoplay bloccato o fallito:", err);
+	    });
+	  }
+	  document.removeEventListener("click", handleFirstClick);
+    };
+
+    document.addEventListener("click", handleFirstClick);
+
+    return () => {
+	  document.removeEventListener("click", handleFirstClick);
+    };
+  }, []);
 
 
 
@@ -217,53 +254,61 @@ function GameContainer() {
 	  
 	  if (data.type === "SPIN_REQUEST") {
 	    try {
-		  const backendRes = await fetch("http://localhost:3000/check-backend-balance");
-		  const backendData = await backendRes.json();
-
-		  const backendBalance = BigInt(backendData.balance || "0");
-		  const MIN_REQUIRED = 10_000_000_000n;
-
-		  if (backendBalance < MIN_REQUIRED) {
-		    toast.warning("Il wallet premi è attualmente senza fondi. Le vincite potrebbero non essere pagate.");
-		    // Ma lasciamo proseguire lo spin normalmente
+		  const latestRes = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${account.address}`);
+		  const latestData = await latestRes.json();
+		  const latestBalance = latestData.balance ?? 0;
+          const SPIN_COST = 10000;
+		  if (latestBalance < SPIN_COST) {
+		    toast.error("Invalid spin due to insufficient balance.");
+		    await loadSlotBalance(account.address);
+		    return;
 		  }
-	    } catch (err) {
-		  console.error("❌ Errore durante verifica saldo backend:", err);
-		  toast.error("Errore nel controllo fondi premi.");
-	    }
 
-	    const SPIN_COST = 10000;
-	    if (slotBalance < SPIN_COST) {
-		  event.source?.postMessage({ type: "SPIN_DENIED", reason: "Saldo insufficiente" }, "*");
-		  return;
-	    }
-
-	    try {
-		  const newBalance = slotBalance - SPIN_COST;
-		  await fetch("http://localhost:3000/balance/set", {
+		  const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/spin", {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
-		    body: JSON.stringify({ wallet: account.address, newBalance }),
+		    body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
 		  });
-		  
-		  setSlotBalance(newBalance);
-		  postBalanceToGame(newBalance);
-		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance }, "*");
-		  		 
-	    } catch (err) {
-		  console.error("Errore imprevisto durante spin:", err);
-		  event.source?.postMessage({ type: "SPIN_DENIED", reason: "Errore imprevisto" }, "*");
-	    }
 
-	    return;
+		  let data;
+		  try {
+		    data = await res.json(); // parsing protetto
+		  } catch (parseErr) {
+		    console.error("❌ Errore parsing JSON:", parseErr);
+		    toast.error("Invalid response from the server");
+		    await loadSlotBalance(account.address);
+		    return;
+		  }
+
+		  if (!res.ok) {
+		    toast.error(`Spin denied: ${data.message || "Unknown error"}`);
+		    await loadSlotBalance(account.address);
+		    return;
+		}
+
+		  setSlotBalance(data.newBalance);
+		  postBalanceToGame(data.newBalance);
+		  console.log("✅ SPIN_GRANTED autorizzato");
+		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
+		  lastSpinGrantedRef.current = true;
+
+	    } catch (err) {
+		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
+		  toast.error("Unexpected error during spin.");
+		  await loadSlotBalance(account.address);
+		  return;
+	    }
 	  }
 
-
-
 	  if (data.type === "SPIN_WIN") {
+	    if (!lastSpinGrantedRef.current) {
+		  console.warn("⚠️ SPIN_WIN ricevuto senza autorizzazione. Ignorato.");
+		  return;
+	    }
+	    lastSpinGrantedRef.current = false;	  
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
-	      const winAudio = new Audio("/win-sound.wav");
+	      const winAudio = new Audio("/slot/win-sound.wav");
 		  winAudio.play();
 
 	  	  setFlashWin(true);
@@ -276,8 +321,7 @@ function GameContainer() {
 		  setTimeout(() => {
 		    setGlowWin(false);
 		  }, 2000);
-
-		  setSpinLog((prev) => [...prev, `✅ Win: +${amount} MBLUB`]);
+		  setSpinLog((prev) => [...prev, `✅ Win: +${amount} $FLOW`]);
 		  await updateSlotBalance(account.address, amount);
 	    } else {
 		  setSpinLog((prev) => [...prev, `❌ No Win`]);
@@ -285,15 +329,17 @@ function GameContainer() {
 	  }
 
 
-      if (data.type === "REQUEST_BALANCE") {
-        postBalanceToGame(slotBalance);
-      }
+	  if (data.type === "REQUEST_BALANCE") {
+	    const safeBalance = slotBalance ?? 0;
+	    console.log("📤 Il gioco ha chiesto il saldo. Invio:", safeBalance);
+	    postBalanceToGame(safeBalance);
+	  }
 	  
       console.log("✅ React ha ricevuto FREE_SPIN_USED, sto aggiornando Supabase");
 
-	  if (data.type === "FREE_SPIN_USED_NFT") {
+	  if (data.type === "FREE_SPIN_USED_NFT") {  
 	    try {
-		  const res = await fetch("http://localhost:3000/free-spin", {
+		  const res = await fetch("https://flow-loyalty-backend.onrender.com/free-spin", {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
@@ -303,16 +349,16 @@ function GameContainer() {
 		  if (res.ok) {
 		    setFreeSpinsLeft(result.spinsLeft ?? 0);
 		  } else {
-		    toast.error(result.message || "Errore nell'uso dello spin NFT");
+		    toast.error(result.message || "Error using NFT spin");
 		  }
 	    } catch (err) {
-		  console.error("Errore registrazione spin NFT:", err);
+		  console.error("Error recording NFT spin:", err);
 	    }
 	  }
 
-	  if (data.type === "FREE_SPIN_USED_BAL") {
+	  if (data.type === "FREE_SPIN_USED_BAL") {  
 	    try {
-		  const res = await fetch("http://localhost:3000/high-balance-spin", {
+		  const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
@@ -322,10 +368,10 @@ function GameContainer() {
 		  if (res.ok) {
 		    setHighBalanceCanSpin(false);
 		  } else {
-		    toast.error(result.message || "Errore nell'uso dello spin token");
+		    toast.error(result.message || "Error using token spin");
 		  }
 	    } catch (err) {
-		  console.error("Errore registrazione spin token:", err);
+		  console.error("Error recording token spin:", err);
 	    }
 	  }
     };
@@ -334,26 +380,35 @@ function GameContainer() {
     return () => window.removeEventListener("message", handleMessage);
   }, [connected, account, slotBalance]);
 
+  useEffect(() => {
+    if (slotBalance !== null) {
+	  console.log("📤 React invia balance aggiornato al gioco:", slotBalance);
+	  setTimeout(() => postBalanceToGame(slotBalance), 5000);
+    }
+  }, [slotBalance]);
+
   return (
     <div className="app-container">
       <div className="left-panel">
         <ConnectButton />
+	    <audio ref={backgroundMusicRef} src="/slot/flow-theme.mp3" loop />
         {isWalletReady ? (
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
-              <p><strong>$FLOW WALLET:</strong> {mblubBalance ?? "..."}</p>
+              <p><strong>$FLOW WALLET:</strong> {FLOWBalance ?? "..."}</p>
               <p><strong>$FLOW SLOT:</strong> {slotBalance}</p>
               {freeSpinsLeft > 0 && (
 				<button
 				  className="btn btn-free-spin glow-effect"
 				  onClick={async () => {
-					console.log("🟢 Click su Usa Spin Gratuito");
+					console.log("🟢 Click Free Spin");
 					const ok = await checkBackendBalanceOk();
 					if (!ok) {
-					  toast.error("Wallet premi vuoto. Attendi ricarica.");
+					  toast.error("Reward wallet empty. Please wait for refill.");
 					  return;
 					}
+                    lastSpinGrantedRef.current = true;; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO					
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
@@ -378,18 +433,37 @@ function GameContainer() {
 			    <div className="tooltip-container">
 				  <button
 				    className="btn btn-free-spin btn-highspin glow-effect"
-				    onClick={async () => {
+				    onClick={async () => {	
 					  const ok = await checkBackendBalanceOk();
 					  if (!ok) {
-					    toast.error("Wallet premi vuoto. Attendi ricarica.");
+					    toast.error("Reward wallet empty. Please wait for refill.");
 					    return;
 					  }
-					  console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");
-					  document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+
+					  // Verifica lato backend se può ancora spinare
+					  try {
+					    const res = await fetch(`https://flow-loyalty-backend.onrender.com/high-balance-spin?wallet=${account.address}`);
+					    const data = await res.json();
+
+					    if (!res.ok || !data.canSpin) {
+						  toast.error("Spin already used today");
+						  setHighBalanceCanSpin(false); // Nascondi il pulsante
+						  return;
+					    }
+
+					    lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
+					    console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
+					    document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
+
+					  } catch (err) {
+					    console.error("Errore durante il check dello spin:", err);
+					    toast.error("Errore durante la verifica dello spin");
+					  }
 				    }}
 				  >
 				    🐳
 				  </button>
+
 				  <span className="tooltip-text">Whale FREE spin</span>
 			    </div>
 			  )}
@@ -397,7 +471,7 @@ function GameContainer() {
 			</div>
           </>
         ) : (
-          <div className="wallet-warning">❌ Wallet non autorizzato</div>
+          <div className="wallet-warning">❌ Unauthorized wallet</div>
         )}
       </div>
 	  <div className="floating-info">
@@ -410,7 +484,23 @@ function GameContainer() {
         <h1 className="app-title neon-text">$Flow Loyalty Slot</h1>
         <div className="slot-frame-wrapper">
           <div className={`animated-border-glow ${glowWin ? "glow-win" : ""}`}></div>
-          <iframe title="Slot Game" src="index.html" className="game-frame" />
+		  <iframe
+		    title="Flow Loyalty Slot"
+		    src="/slot/index.html"
+		    className="game-frame"
+		    onLoad={() => {
+		  	  console.log("📥 iframe caricato");
+			  const checkBalanceReady = setInterval(() => {
+			    if (slotBalance > 0) {
+				  console.log("✅ Balance pronto, invio al gioco:", slotBalance);
+				  postBalanceToGame(slotBalance);
+				  clearInterval(checkBalanceReady);
+			    } else {
+				   console.log("⏳ In attesa che slotBalance sia > 0...");
+			    }
+			  }, 300); // controlla ogni 300ms
+		    }}
+		  />
         </div>
       </div>
 
@@ -427,7 +517,7 @@ function GameContainer() {
 			    </li>
 			  ))}
 		    </ul>
-		    <button className="btn btn-close" onClick={() => setShowInfoModal(false)}>✖ Chiudi</button>
+		    <button className="btn btn-close" onClick={() => setShowInfoModal(false)}>✖ 	Close</button>
 		  </div>
 	    </div>
 	  )}
@@ -435,9 +525,9 @@ function GameContainer() {
       {showLogModal && (
         <div className="log-modal-backdrop" onClick={() => setShowLogModal(false)}>
           <div className="log-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>📋 Log Vincite</h2>
+            <h2>📋 Win Log</h2>
             <ul>
-              {spinLog.length === 0 && <li>(Nessun log disponibile)</li>}
+              {spinLog.length === 0 && <li>(No log available)</li>}
               {spinLog.map((entry, idx) => (
                 <li key={idx}>{entry}</li>
               ))}
