@@ -182,7 +182,7 @@
   z-index: 1;
   pointer-events: none;
   background: linear-gradient(135deg, #ff00cc, #00ffff, #ffcc00, #ff00cc);
-  background-size: 900% 900%;
+  background-size: 700% 700%;
   animation: glowPulse 4s ease infinite;
   filter: blur(12px);
   opacity: 0.9;
