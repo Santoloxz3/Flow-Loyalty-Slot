@@ -178,11 +178,11 @@
   left: 15px;     /* uguale al padding del wrapper */
   right: 15px;    /* uguale al padding del wrapper */
   bottom: 15px;   /* uguale al padding del wrapper */
-  border-radius: 80px;
+  border-radius: 100px;
   z-index: 1;
   pointer-events: none;
   background: linear-gradient(135deg, #ff00cc, #00ffff, #ffcc00, #ff00cc);
-  background-size: 700% 700%;
+  background-size: 800% 800%;
   animation: glowPulse 4s ease infinite;
   filter: blur(12px);
   opacity: 0.9;
