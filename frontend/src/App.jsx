@@ -200,12 +200,50 @@ function GameContainer() {
     setLoading(true);
     try {
       const coins = await client.listCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
-      if (!coins.objects.length) return toast.error("Insufficient balance.");
-      const coinObjectId = coins.objects[0].objectId;
+      const flowCoins = [...(coins.objects || [])].sort(
+        (a, b) => Number(BigInt(b.balance) - BigInt(a.balance)),
+      );
+
+      if (!flowCoins.length) {
+        toast.error("No FLOW coins found in the wallet.");
+        return;
+      }
+
+      const totalAvailable = flowCoins.reduce((sum, coin) => sum + BigInt(coin.balance), 0n);
+      console.info("[deposit] FLOW coin objects loaded", {
+        address: account.address,
+        requestedAmount: amountBigInt.toString(),
+        totalAvailable: totalAvailable.toString(),
+        objects: flowCoins.map((coin) => ({
+          objectId: coin.objectId,
+          balance: coin.balance,
+        })),
+      });
+
+      if (totalAvailable < amountBigInt) {
+        toast.error(`Insufficient FLOW balance for ${amount} FLOW deposit.`);
+        return;
+      }
+
+      const selectedCoins = [];
+      let collectedBalance = 0n;
+      for (const coin of flowCoins) {
+        selectedCoins.push(coin);
+        collectedBalance += BigInt(coin.balance);
+        if (collectedBalance >= amountBigInt) break;
+      }
 
       const tx = new Transaction();
-      const coin = tx.object(coinObjectId);
-      const [splitCoin] = tx.splitCoins(coin, [amountBigInt]);
+      const primaryCoin = tx.object(selectedCoins[0].objectId);
+
+      if (selectedCoins.length > 1) {
+        tx.mergeCoins(
+          primaryCoin,
+          selectedCoins.slice(1).map((coin) => tx.object(coin.objectId)),
+        );
+      }
+
+      const [splitCoin] = tx.splitCoins(primaryCoin, [amountBigInt]);
       tx.transferObjects([splitCoin], SLOT_WALLET_ADDRESS);
       await signAndExecuteTransaction({ transaction: tx });
       await updateSlotBalance(account.address, amount);
@@ -213,9 +251,12 @@ function GameContainer() {
       toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
       console.error("❌ Errore durante il deposito:", e);
-      toast.error("Error during deposit: " + (e?.message || "unknown error"));
+      toast.error(
+        "Deposit simulation failed. Check SUI gas, FLOW balance, or fragmented FLOW coin objects in the wallet.",
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const [showInfoModal, setShowInfoModal] = useState(false);
