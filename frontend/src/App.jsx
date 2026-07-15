@@ -207,12 +207,17 @@ function GameContainer() {
     const minGasBudget = 50_000_000n;
     setLoading(true);
     try {
-      const suiGasBalance = await client.getBalance({ owner: account.address });
-      const availableGas = BigInt(suiGasBalance.totalBalance || "0");
-
-      if (availableGas < minGasBudget) {
-        toast.error("Not enough SUI in the wallet to pay the network fee.");
-        return;
+      let availableGas = null;
+      try {
+        const suiGasBalance = await client.getBalance({ owner: account.address });
+        availableGas = BigInt(suiGasBalance.totalBalance || "0");
+        console.info("[deposit] SUI gas balance", {
+          address: account.address,
+          balanceMist: availableGas.toString(),
+          minGasBudget: minGasBudget.toString(),
+        });
+      } catch (gasError) {
+        console.warn("[deposit] Unable to pre-check SUI gas balance, continuing with transaction build", gasError);
       }
 
       const coins = await client.listCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
@@ -288,8 +293,11 @@ function GameContainer() {
       toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
       console.error("❌ Errore durante il deposito:", e);
+      const message = e?.message || String(e || "");
       toast.error(
-        e?.message || "Deposit failed. Check SUI gas, FLOW balance, or Nightly mobile execution.",
+        /gas|sui|fee|budget|mist/i.test(message)
+          ? "Not enough SUI in the wallet to pay the network fee."
+          : message || "Deposit failed. Check SUI gas, FLOW balance, or Nightly mobile execution.",
       );
     } finally {
       setLoading(false);
