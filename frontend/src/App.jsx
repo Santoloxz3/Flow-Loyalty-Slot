@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
-import { ConnectButton } from "@mysten/dapp-kit-react/ui";
-import { useCurrentAccount, useCurrentClient, useDAppKit } from "@mysten/dapp-kit-react";
+import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
+import "@suiet/wallet-kit/style.css";
+import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
@@ -9,13 +10,12 @@ import "./App.css";
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
 const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
+const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
+const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
 
 
 function GameContainer() {
-  const account = useCurrentAccount();
-  const client = useCurrentClient();
-  const dAppKit = useDAppKit();
-  const connected = Boolean(account?.address);
+  const { connected, account, signAndExecuteTransaction, signPersonalMessage } = useWallet();
   const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [balanceStatus, setBalanceStatus] = useState("idle");
@@ -146,7 +146,7 @@ function GameContainer() {
       const timestamp = Date.now();
       const message = `Authorize withdrawal for wallet: ${account.address}, nonce: ${nonce}, timestamp: ${timestamp}`;
       const encodedMessage = new TextEncoder().encode(message);
-      const signed = await dAppKit.signPersonalMessage({ message: encodedMessage });
+      const signed = await signPersonalMessage({ message: encodedMessage });
 
       const res = await fetch(`${BACKEND_URL}/withdraw`, {
         method: "POST",
@@ -207,7 +207,7 @@ function GameContainer() {
       const coin = tx.object(coinObjectId);
       const [splitCoin] = tx.splitCoins(coin, [amountBigInt]);
       tx.transferObjects([splitCoin], SLOT_WALLET_ADDRESS);
-      await dAppKit.signAndExecuteTransaction({ transaction: tx });
+      await signAndExecuteTransaction({ transaction: tx });
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
       toast.success(`Deposit completed: ${amount} $FLOW`);
@@ -253,14 +253,14 @@ function GameContainer() {
       if (!connected || !account?.address) return setIsWalletReady(false);
       try {
         const msg = new TextEncoder().encode("wallet-check");
-        const signature = await dAppKit.signPersonalMessage({ message: msg });
+        const signature = await signPersonalMessage({ message: msg });
         setIsWalletReady(!!signature);
       } catch (err) {
         setIsWalletReady(false);
       }
     };
     checkWallet();
-  }, [connected, account, dAppKit]);
+  }, [connected, account, signPersonalMessage]);
 
   useEffect(() => {
     if (!connected || !account?.address) {
@@ -573,5 +573,9 @@ function GameContainer() {
 }
 
 export default function App() {
-  return <GameContainer />;
+  return (
+    <WalletProvider>
+      <GameContainer />
+    </WalletProvider>
+  );
 }
