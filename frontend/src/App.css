@@ -45,6 +45,11 @@
   margin-top: 2rem;
 }
 
+.wallet-line-icon {
+  display: inline-block;
+  width: 1.6em;
+}
+
 .controls {
   display: flex;
   align-items: center;

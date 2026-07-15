@@ -460,9 +460,8 @@ function GameContainer() {
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
-              <p><strong>SUI WALLET:</strong> {balanceStatus === "loading" ? "Fetching..." : (suiBalance ?? "--")}</p>
-              <p><strong>$FLOW WALLET:</strong> {balanceStatus === "loading" ? "Fetching..." : (FLOWBalance ?? "--")}</p>
-              <p><strong>$FLOW SLOT:</strong> {slotBalance}</p>
+              <p><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {balanceStatus === "loading" ? "Fetching..." : (FLOWBalance ?? "--")}</p>
+              <p><span className="wallet-line-icon" aria-hidden="true">🎰</span><strong> FLOW Slot:</strong> {slotBalance}</p>
               {balanceError ? <p className="wallet-warning">{balanceError}</p> : null}
               {freeSpinsLeft > 0 && (
 				<button
