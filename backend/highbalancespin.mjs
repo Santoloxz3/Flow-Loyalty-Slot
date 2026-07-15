@@ -1,8 +1,8 @@
 import "dotenv/config";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
 import { createClient } from "@supabase/supabase-js";
+import { createSuiTestnetClient } from "./suiClient.mjs";
 
-const client = new SuiClient({ url: getFullnodeUrl("testnet") });
+const client = createSuiTestnetClient();
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const FLOW_COIN_TYPE = process.env.FLOW_COIN_TYPE; // oppure hardcodato
@@ -12,9 +12,9 @@ export async function highBalanceSpinHandler(req, res) {
   if (!wallet) return res.status(400).json({ message: "Wallet richiesto" });
 
   try {
-    const balances = await client.getAllBalances({ owner: wallet });
-    const FLOW = balances.find((b) => b.coinType === FLOW_COIN_TYPE);
-    const balance = FLOW ? BigInt(FLOW.totalBalance) : 0n;
+    console.info("[high-balance-spin] Checking FLOW balance", { wallet });
+    const flowBalance = await client.getBalance({ owner: wallet, coinType: FLOW_COIN_TYPE });
+    const balance = BigInt(flowBalance.balance?.balance || "0");
 
     const threshold = 50_000_000n * 1_000_000_000n; // 50M FLOW
 

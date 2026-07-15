@@ -1,12 +1,11 @@
 import "dotenv/config";
-import express from "express";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
-import { TransactionBlock } from "@mysten/sui.js/transactions";
 import { createClient } from "@supabase/supabase-js";
-import { Ed25519Keypair, Ed25519PublicKey } from "@mysten/sui.js/keypairs/ed25519";
-import { verifyPersonalMessage } from "@mysten/sui.js/verify";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { Transaction } from "@mysten/sui/transactions";
+import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
+import { createSuiTestnetClient } from "./suiClient.mjs";
 
-const client = new SuiClient({ url: getFullnodeUrl("testnet") });
+const client = createSuiTestnetClient();
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -25,25 +24,10 @@ try {
 async function isSignatureValid(signature, message, expectedWalletAddress) {
   try {
     const messageBytes = new TextEncoder().encode(message);
-    const result = await verifyPersonalMessage(messageBytes, signature);
-
-    const publicKey =
-      result instanceof Ed25519PublicKey ? result :
-      result?.publicKey instanceof Ed25519PublicKey ? result.publicKey :
-      null;
-
-    if (!publicKey) {
-      console.error("❌ Nessuna chiave pubblica restituita:", result);
-      return false;
-    }
-
-    const recoveredAddress = publicKey.toSuiAddress();
-    if (recoveredAddress !== expectedWalletAddress) {
-      console.error("❌ Firma valida ma da wallet diverso:", recoveredAddress);
-      return false;
-    }
-
-    console.log("✅ Firma verificata per wallet:", recoveredAddress);
+    await verifyPersonalMessageSignature(messageBytes, signature, {
+      address: expectedWalletAddress,
+    });
+    console.log("✅ Firma verificata per wallet:", expectedWalletAddress);
     return true;
   } catch (err) {
     console.error("❌ Errore durante la verifica della firma:", err);
@@ -122,20 +106,20 @@ export async function withdraw(req, res) {
     const balance = BigInt(balanceData.balance);
     const amount = balance * 1_000_000_000n;
 
-    const coins = await client.getCoins({
+    const coins = await client.listCoins({
       owner: keypair.getPublicKey().toSuiAddress(),
       coinType: process.env.FLOW_COIN_TYPE,
     });
 
 	// ✅ Controllo saldo minimo richiesto nel wallet backend
-	const totalAvailable = coins.data.reduce((sum, c) => sum + BigInt(c.balance), 0n);
+	const totalAvailable = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
 	const MIN_REQUIRED = 50_000_000_000n; // 50000 $FLOW
 	if (totalAvailable < MIN_REQUIRED) {
 	  return res.status(500).json({ message: "Il wallet dei premi non ha fondi sufficienti per effettuare prelievi." });
 	}
 
 
-    if (!coins.data.length) {
+    if (!coins.objects.length) {
       return res.status(500).json({ message: "FLOW non disponibili nel backend" });
     }
 
@@ -153,29 +137,32 @@ export async function withdraw(req, res) {
 
 	  txId = inserted?.[0]?.id;
 
-	  const txb = new TransactionBlock();
-	  const [coin] = txb.splitCoins(
-		txb.object(coins.data[0].coinObjectId),
-		[txb.pure(amount)]
+	  const tx = new Transaction();
+	  const [coin] = tx.splitCoins(
+		tx.object(coins.objects[0].objectId),
+		[amount]
 	  );
-	  txb.transferObjects([coin], txb.pure(wallet));
+	  tx.transferObjects([coin], wallet);
 
-	  const result = await client.signAndExecuteTransactionBlock({
+	  const result = await client.signAndExecuteTransaction({
 		signer: keypair,
-		transactionBlock: txb,
-		options: { showEffects: true },
+		transaction: tx,
 	  });
+
+	  if (result.FailedTransaction) {
+		throw new Error(result.FailedTransaction.status?.error?.message || "Transaction failed");
+	  }
 
 	  await supabase.from("balances").update({ balance: 0 }).eq("wallet", wallet);
 	  await supabase.from("transactions").update({
 		status: "success",
-		tx_hash: result.digest,
+		tx_hash: result.Transaction.digest,
 	  }).eq("id", txId);
 
 	  return res.json({
 		success: true,
 		amount: Number(balance),
-		tx: result.digest,
+		tx: result.Transaction.digest,
 	  });
 	} catch (err) {
 	  console.error("❌ Errore prelievo:", err);
@@ -189,32 +176,6 @@ export async function withdraw(req, res) {
 
 	  return res.status(500).json({ message: "Errore durante il prelievo" });
 	}
-
-
-    const txb = new TransactionBlock();
-    const [coin] = txb.splitCoins(
-      txb.object(coins.data[0].coinObjectId),
-      [txb.pure(amount)]
-    );
-    txb.transferObjects([coin], txb.pure(wallet));
-
-    const result = await client.signAndExecuteTransactionBlock({
-      signer: keypair,
-      transactionBlock: txb,
-      options: { showEffects: true },
-    });
-
-    await supabase.from("balances").update({ balance: 0 }).eq("wallet", wallet);
-    await supabase.from("transactions").update({
-      status: "success",
-      tx_hash: result.digest,
-    }).eq("id", txId);
-
-    return res.json({
-      success: true,
-      amount: Number(balance),
-      tx: result.digest,
-    });
   } catch (err) {
     console.error("❌ Errore prelievo:", err);
     return res.status(500).json({ message: err.toString() });
@@ -222,12 +183,12 @@ export async function withdraw(req, res) {
 }
 export async function checkBackendBalance(req, res) {
   try {
-    const coins = await client.getCoins({
+    const coins = await client.listCoins({
       owner: keypair.getPublicKey().toSuiAddress(),
       coinType: process.env.FLOW_COIN_TYPE,
     });
 
-    const total = coins.data.reduce((sum, c) => sum + BigInt(c.balance), 0n);
+    const total = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
     return res.json({ balance: total.toString() }); // in nanos
   } catch (err) {
     console.error("❌ Errore controllo balance backend:", err);

@@ -1,8 +1,8 @@
 import "dotenv/config";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
 import { createClient } from "@supabase/supabase-js";
+import { createSuiTestnetClient } from "./suiClient.mjs";
 
-const client = new SuiClient({ url: getFullnodeUrl("testnet") });
+const client = createSuiTestnetClient();
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function freeSpinHandler(req, res) {
@@ -10,12 +10,12 @@ async function freeSpinHandler(req, res) {
   if (!wallet) return res.status(400).json({ message: "Wallet richiesto" });
 
   try {
-    const owned = await client.getOwnedObjects({
+    const owned = await client.listOwnedObjects({
       owner: wallet,
-      options: { showType: true, showContent: true },
+      include: { content: true },
     });
 
-    const userObjectIds = owned.data.map((o) => o.data?.objectId).filter(Boolean);
+    const userObjectIds = owned.objects.map((o) => o.objectId).filter(Boolean);
     if (userObjectIds.length === 0) return res.json({ spinsLeft: 0 });
 
     const { data: whitelist } = await supabase

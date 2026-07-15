@@ -1,25 +1,25 @@
 import React, { useEffect, useState, useRef } from "react";
-import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
-import "@suiet/wallet-kit/style.css";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui.js/client";
-import { TransactionBlock } from "@mysten/sui.js/transactions";
+import { ConnectButton } from "@mysten/dapp-kit-react/ui";
+import { useCurrentAccount, useCurrentClient, useDAppKit } from "@mysten/dapp-kit-react";
+import { Transaction } from "@mysten/sui/transactions";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import "./App.css";
 
-const SUI_NODE_URL = getFullnodeUrl("testnet");
-const client = new SuiClient({ url: SUI_NODE_URL });
-
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
-function isNightlyMobile() {
-  return /Nightly/i.test(navigator.userAgent) && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
-}
+const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 
 
 function GameContainer() {
-  const { connected, account, signAndExecuteTransactionBlock, signTransactionBlock, signMessage } = useWallet();
+  const account = useCurrentAccount();
+  const client = useCurrentClient();
+  const dAppKit = useDAppKit();
+  const connected = Boolean(account?.address);
+  const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
+  const [balanceStatus, setBalanceStatus] = useState("idle");
+  const [balanceError, setBalanceError] = useState("");
   const [depositMultiplier, setDepositMultiplier] = useState(1);
   const [slotBalance, setSlotBalance] = useState(0);
   const [isWalletReady, setIsWalletReady] = useState(false);
@@ -41,7 +41,7 @@ function GameContainer() {
   const fetchFreeSpins = async () => {
     if (!account?.address) return;
     try {
-      const res = await fetch(`https://flow-loyalty-backend.onrender.com/free-spin?wallet=${account.address}`);
+      const res = await fetch(`${BACKEND_URL}/free-spin?wallet=${account.address}`);
       const data = await res.json();
       setFreeSpinsLeft(data.spinsLeft ?? 0);
     } catch (err) {
@@ -52,7 +52,7 @@ function GameContainer() {
   const fetchHighBalanceSpin = async () => {
     if (!account?.address) return;
     try {
-  	  const res = await fetch(`https://flow-loyalty-backend.onrender.com/high-balance-spin?wallet=${account.address}`);
+  	  const res = await fetch(`${BACKEND_URL}/high-balance-spin?wallet=${account.address}`);
 	  const data = await res.json();
 	  setHighBalanceCanSpin(data.canSpin ?? false);
     } catch (err) {
@@ -64,7 +64,7 @@ function GameContainer() {
 
   const loadSlotBalance = async (wallet) => {
     try {
-	  const res = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${wallet}`);
+	  const res = await fetch(`${BACKEND_URL}/balance?wallet=${wallet}`);
 	  const data = await res.json();
 	  const balance = data.balance ?? 0;
 	  setSlotBalance(balance);
@@ -77,7 +77,7 @@ function GameContainer() {
 
   const updateSlotBalance = async (wallet, amountToAdd) => {
     try {
-      const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/update", {
+      const res = await fetch(`${BACKEND_URL}/balance/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ wallet, amountToAdd }),
@@ -92,13 +92,49 @@ function GameContainer() {
 
 
   const fetchBalances = async () => {
+    if (!account?.address) {
+      setSuiBalance(null);
+      setFLOWBalance(null);
+      setBalanceStatus("idle");
+      setBalanceError("");
+      return;
+    }
+
+    setBalanceStatus("loading");
+    setBalanceError("");
+
     try {
-      const balances = await client.getAllBalances({ owner: account.address });
-      const FLOW = balances.find((b) => b.coinType === FLOW_COIN_TYPE);
-      setFLOWBalance(FLOW ? parseFloat(FLOW.totalBalance) / 1e9 : 0);
+      console.info("[wallet] Fetching balances from Sui testnet gRPC", {
+        address: account.address,
+      });
+
+      const [suiBalanceResponse, flowBalanceResponse] = await Promise.all([
+        client.getBalance({ owner: account.address }),
+        client.getBalance({ owner: account.address, coinType: FLOW_COIN_TYPE }),
+      ]);
+
+      const nextSuiBalance = Number(suiBalanceResponse.balance?.balance || "0") / 1e9;
+      const nextFlowBalance = Number(flowBalanceResponse.balance?.balance || "0") / 1e9;
+
+      setSuiBalance(nextSuiBalance);
+      setFLOWBalance(nextFlowBalance);
       await loadSlotBalance(account.address);
-    } catch (e) {
-      toast.error("Error fetching balances");
+      setBalanceStatus("ready");
+      console.info("[wallet] Balances loaded", {
+        address: account.address,
+        sui: nextSuiBalance,
+        flow: nextFlowBalance,
+      });
+    } catch (error) {
+      console.error("[wallet] Failed to fetch balances", {
+        address: account.address,
+        error,
+      });
+      setSuiBalance(null);
+      setFLOWBalance(null);
+      setBalanceStatus("error");
+      setBalanceError("Unable to load SUI/FLOW balances from Sui testnet. Reconnect Nightly or retry in a moment.");
+      toast.error("Unable to fetch SUI/FLOW balances");
     }
   };
 
@@ -110,13 +146,12 @@ function GameContainer() {
       const timestamp = Date.now();
       const message = `Authorize withdrawal for wallet: ${account.address}, nonce: ${nonce}, timestamp: ${timestamp}`;
       const encodedMessage = new TextEncoder().encode(message);
-      const signed = await signMessage({ message: encodedMessage });
-      const publicKeyHex = [...account.publicKey].map((b) => b.toString(16).padStart(2, "0")).join("");
+      const signed = await dAppKit.signPersonalMessage({ message: encodedMessage });
 
-      const res = await fetch("https://flow-loyalty-backend.onrender.com/withdraw", {
+      const res = await fetch(`${BACKEND_URL}/withdraw`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: account.address, message, signature: signed.signature, publicKey: publicKeyHex }),
+        body: JSON.stringify({ wallet: account.address, message, signature: signed.signature }),
       });
 
       const result = await res.json();
@@ -146,7 +181,7 @@ function GameContainer() {
 
   const checkBackendBalanceOk = async () => {
     try {
-	  const res = await fetch("https://flow-loyalty-backend.onrender.com/check-backend-balance");
+	  const res = await fetch(`${BACKEND_URL}/check-backend-balance`);
 	  const data = await res.json();
 	  const backendBalance = BigInt(data.balance || "0");
 	  const MIN_REQUIRED = 50_000_000_000n; // 10 FLOW in nanos
@@ -164,27 +199,15 @@ function GameContainer() {
     const amountBigInt = BigInt(amount * 1e9);
     setLoading(true);
     try {
-      const coins = await client.getCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
-      if (!coins.data.length) return toast.error("Insufficient balance.");
-      const coinObjectId = coins.data[0].coinObjectId;
+      const coins = await client.listCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
+      if (!coins.objects.length) return toast.error("Insufficient balance.");
+      const coinObjectId = coins.objects[0].objectId;
 
-      const tx = new TransactionBlock();
+      const tx = new Transaction();
       const coin = tx.object(coinObjectId);
-      const [splitCoin] = tx.splitCoins(coin, [tx.pure(amountBigInt)]);
-      tx.transferObjects([splitCoin], tx.pure(SLOT_WALLET_ADDRESS));
-
-	  if (isNightlyMobile()) {
-	    console.log("📱 Nightly Mobile rilevato – uso sign + execute separati");
-	    const signedTx = await signTransactionBlock({ transactionBlock: tx });
-	    const result = await client.executeTransactionBlock({
-		  transactionBlock: signedTx.transactionBlockBytes,
-		  signature: signedTx.signature,
-		  options: { showEffects: true }, // 👈 NECESSARIO
-	    });
-	    console.log("✅ Transazione eseguita:", result);
-	  } else {
-	    await signAndExecuteTransactionBlock({ transactionBlock: tx });
-	  }
+      const [splitCoin] = tx.splitCoins(coin, [amountBigInt]);
+      tx.transferObjects([splitCoin], SLOT_WALLET_ADDRESS);
+      await dAppKit.signAndExecuteTransaction({ transaction: tx });
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
       toast.success(`Deposit completed: ${amount} $FLOW`);
@@ -230,17 +253,24 @@ function GameContainer() {
       if (!connected || !account?.address) return setIsWalletReady(false);
       try {
         const msg = new TextEncoder().encode("wallet-check");
-        const signature = await signMessage({ message: msg });
+        const signature = await dAppKit.signPersonalMessage({ message: msg });
         setIsWalletReady(!!signature);
       } catch (err) {
         setIsWalletReady(false);
       }
     };
     checkWallet();
-  }, [connected, account]);
+  }, [connected, account, dAppKit]);
 
   useEffect(() => {
-    if (!connected || !account?.address) return;
+    if (!connected || !account?.address) {
+      setIsWalletReady(false);
+      setSuiBalance(null);
+      setFLOWBalance(null);
+      setBalanceStatus("idle");
+      setBalanceError("");
+      return;
+    }
     fetchBalances();
     fetchFreeSpins();
 	fetchHighBalanceSpin();
@@ -254,7 +284,7 @@ function GameContainer() {
 	  
 	  if (data.type === "SPIN_REQUEST") {
 	    try {
-		  const latestRes = await fetch(`https://flow-loyalty-backend.onrender.com/balance?wallet=${account.address}`);
+			  const latestRes = await fetch(`${BACKEND_URL}/balance?wallet=${account.address}`);
 		  const latestData = await latestRes.json();
 		  const latestBalance = latestData.balance ?? 0;
           const SPIN_COST = 10000;
@@ -264,7 +294,7 @@ function GameContainer() {
 		    return;
 		  }
 
-		  const res = await fetch("https://flow-loyalty-backend.onrender.com/balance/spin", {
+			  const res = await fetch(`${BACKEND_URL}/balance/spin`, {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
@@ -339,7 +369,7 @@ function GameContainer() {
 
 	  if (data.type === "FREE_SPIN_USED_NFT") {  
 	    try {
-		  const res = await fetch("https://flow-loyalty-backend.onrender.com/free-spin", {
+			  const res = await fetch(`${BACKEND_URL}/free-spin`, {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
@@ -358,7 +388,7 @@ function GameContainer() {
 
 	  if (data.type === "FREE_SPIN_USED_BAL") {  
 	    try {
-		  const res = await fetch("https://flow-loyalty-backend.onrender.com/high-balance-spin", {
+			  const res = await fetch(`${BACKEND_URL}/high-balance-spin`, {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
@@ -396,8 +426,10 @@ function GameContainer() {
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
-              <p><strong>$FLOW WALLET:</strong> {FLOWBalance ?? "..."}</p>
+              <p><strong>SUI WALLET:</strong> {balanceStatus === "loading" ? "Fetching..." : (suiBalance ?? "--")}</p>
+              <p><strong>$FLOW WALLET:</strong> {balanceStatus === "loading" ? "Fetching..." : (FLOWBalance ?? "--")}</p>
               <p><strong>$FLOW SLOT:</strong> {slotBalance}</p>
+              {balanceError ? <p className="wallet-warning">{balanceError}</p> : null}
               {freeSpinsLeft > 0 && (
 				<button
 				  className="btn btn-free-spin glow-effect"
@@ -442,7 +474,7 @@ function GameContainer() {
 
 					  // Verifica lato backend se può ancora spinare
 					  try {
-					    const res = await fetch(`https://flow-loyalty-backend.onrender.com/high-balance-spin?wallet=${account.address}`);
+					    const res = await fetch(`${BACKEND_URL}/high-balance-spin?wallet=${account.address}`);
 					    const data = await res.json();
 
 					    if (!res.ok || !data.canSpin) {
@@ -541,10 +573,5 @@ function GameContainer() {
 }
 
 export default function App() {
-  return (
-    <WalletProvider>
-      <GameContainer />
-    </WalletProvider>
-  );
+  return <GameContainer />;
 }
-
