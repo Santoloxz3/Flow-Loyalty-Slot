@@ -204,8 +204,17 @@ function GameContainer() {
     if (!connected || !account?.address) return toast.error("Connect to the wallet");
     const amount = depositMultiplier * 10000;
     const amountBigInt = BigInt(amount * 1e9);
+    const minGasBudget = 50_000_000n;
     setLoading(true);
     try {
+      const suiGasBalance = await client.getBalance({ owner: account.address });
+      const availableGas = BigInt(suiGasBalance.totalBalance || "0");
+
+      if (availableGas < minGasBudget) {
+        toast.error("Not enough SUI in the wallet to pay the network fee.");
+        return;
+      }
+
       const coins = await client.listCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
       const flowCoins = [...(coins.objects || [])].sort(
         (a, b) => Number(BigInt(b.balance) - BigInt(a.balance)),
@@ -241,6 +250,8 @@ function GameContainer() {
       }
 
       const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.setGasBudget(minGasBudget);
       const primaryCoin = tx.object(selectedCoins[0].objectId);
 
       if (selectedCoins.length > 1) {
@@ -255,14 +266,15 @@ function GameContainer() {
 
       if (isNightlyMobile()) {
         console.info("[deposit] Nightly mobile detected, using sign + execute fallback");
-        const signedTx = await signTransaction({ transaction: tx });
+        const preparedBytes = await tx.build({ client });
+        const signedTx = await signTransaction({ transaction: Transaction.from(preparedBytes) });
         const execution = await client.executeTransaction({
           transaction: base64ToBytes(signedTx.bytes),
           signatures: [signedTx.signature],
           include: { effects: true },
         });
 
-        if (execution.FailedTransaction) {
+        if (execution.$kind === "FailedTransaction") {
           throw new Error(
             execution.FailedTransaction.status?.error?.message || "Transaction execution failed on Nightly mobile.",
           );
