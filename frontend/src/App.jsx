@@ -290,18 +290,11 @@ function GameContainer() {
 
 
   useEffect(() => {
-    const checkWallet = async () => {
-      if (!connected || !account?.address) return setIsWalletReady(false);
-      try {
-        const msg = new TextEncoder().encode("wallet-check");
-        const signature = await signPersonalMessage({ message: msg });
-        setIsWalletReady(!!signature);
-      } catch (err) {
-        setIsWalletReady(false);
-      }
-    };
-    checkWallet();
-  }, [connected, account, signPersonalMessage]);
+    // Nightly mobile may reject or mis-handle an automatic personal-sign request
+    // triggered immediately after connect. Treat an active connection as ready here
+    // and request a signature only for explicit protected actions like withdraw.
+    setIsWalletReady(Boolean(connected && account?.address));
+  }, [connected, account]);
 
   useEffect(() => {
     if (!connected || !account?.address) {
