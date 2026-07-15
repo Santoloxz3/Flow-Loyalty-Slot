@@ -15,7 +15,7 @@ const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL
 
 
 function GameContainer() {
-  const { connected, account, signAndExecuteTransaction, signPersonalMessage } = useWallet();
+  const { connected, account, signAndExecuteTransaction, signTransaction, signPersonalMessage } = useWallet();
   const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [balanceStatus, setBalanceStatus] = useState("idle");
@@ -33,6 +33,13 @@ function GameContainer() {
   const lastSpinGrantedRef = useRef(false);
   const backgroundMusicRef = useRef(null);
  
+  const isNightlyMobile = () => {
+    if (typeof navigator === "undefined") return false;
+    return /Nightly/i.test(navigator.userAgent) && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
+  };
+
+  const base64ToBytes = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+
 
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
@@ -245,14 +252,32 @@ function GameContainer() {
 
       const [splitCoin] = tx.splitCoins(primaryCoin, [amountBigInt]);
       tx.transferObjects([splitCoin], SLOT_WALLET_ADDRESS);
-      await signAndExecuteTransaction({ transaction: tx });
+
+      if (isNightlyMobile()) {
+        console.info("[deposit] Nightly mobile detected, using sign + execute fallback");
+        const signedTx = await signTransaction({ transaction: tx });
+        const execution = await client.executeTransaction({
+          transaction: base64ToBytes(signedTx.bytes),
+          signatures: [signedTx.signature],
+          include: { effects: true },
+        });
+
+        if (execution.FailedTransaction) {
+          throw new Error(
+            execution.FailedTransaction.status?.error?.message || "Transaction execution failed on Nightly mobile.",
+          );
+        }
+      } else {
+        await signAndExecuteTransaction({ transaction: tx });
+      }
+
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
       toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
       console.error("❌ Errore durante il deposito:", e);
       toast.error(
-        "Deposit simulation failed. Check SUI gas, FLOW balance, or fragmented FLOW coin objects in the wallet.",
+        e?.message || "Deposit failed. Check SUI gas, FLOW balance, or Nightly mobile execution.",
       );
     } finally {
       setLoading(false);
