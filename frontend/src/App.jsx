@@ -1,13 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
   WalletProvider,
-  SuiClientProvider,
-  ConnectButton,
-  createNetworkConfig,
   useCurrentAccount,
   useCurrentWallet,
-  useSignAndExecuteTransaction,
-  useSignPersonalMessage,
+  useWallets,
+  useConnectWallet,
+  useDisconnectWallet,
 } from "@mysten/dapp-kit";
 import "@mysten/dapp-kit/dist/index.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
@@ -23,15 +21,14 @@ const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
 const queryClient = new QueryClient();
-const { networkConfig } = createNetworkConfig({
-  testnet: { url: "https://fullnode.testnet.sui.io" },
-});
 
 function GameContainer() {
   const account = useCurrentAccount();
-  const { isConnected: connected } = useCurrentWallet();
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
-  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
+  const walletState = useCurrentWallet();
+  const { isConnected: connected, currentWallet } = walletState;
+  const wallets = useWallets();
+  const { mutateAsync: connectWallet } = useConnectWallet();
+  const { mutateAsync: disconnectWallet } = useDisconnectWallet();
   const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [balanceStatus, setBalanceStatus] = useState("idle");
@@ -48,6 +45,86 @@ function GameContainer() {
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
   const lastSpinGrantedRef = useRef(false);
   const backgroundMusicRef = useRef(null);
+
+  const handleConnect = async () => {
+    try {
+      const preferredWallet = wallets.find((wallet) => /nightly/i.test(wallet.name)) ?? wallets[0];
+      if (!preferredWallet) {
+        toast.error("No Sui wallet found on this device.");
+        return;
+      }
+      await connectWallet({ wallet: preferredWallet });
+    } catch (error) {
+      console.error("Error connecting wallet:", error);
+      toast.error(error?.message || "Wallet connection failed");
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await disconnectWallet();
+    } catch (error) {
+      console.error("Error disconnecting wallet:", error);
+      toast.error("Wallet disconnect failed");
+    }
+  };
+
+  const signMessageWithWallet = async (messageBytes) => {
+    if (!currentWallet || !account) {
+      throw new Error("No wallet connected.");
+    }
+
+    const signPersonalMessageFeature = currentWallet.features["sui:signPersonalMessage"];
+    if (signPersonalMessageFeature) {
+      return signPersonalMessageFeature.signPersonalMessage({
+        message: messageBytes,
+        account,
+        chain: "sui:testnet",
+      });
+    }
+
+    const signMessageFeature = currentWallet.features["sui:signMessage"];
+    if (signMessageFeature) {
+      const { messageBytes: bytes, signature } = await signMessageFeature.signMessage({
+        message: messageBytes,
+        account,
+      });
+      return { bytes, signature };
+    }
+
+    throw new Error("The connected wallet does not support personal message signing.");
+  };
+
+  const executeTransactionWithWallet = async (transaction) => {
+    if (!currentWallet || !account) {
+      throw new Error("No wallet connected.");
+    }
+
+    const signAndExecuteFeature = currentWallet.features["sui:signAndExecuteTransaction"];
+    if (signAndExecuteFeature) {
+      return signAndExecuteFeature.signAndExecuteTransaction({
+        transaction,
+        account,
+        chain: "sui:testnet",
+      });
+    }
+
+    const legacyFeature = currentWallet.features["sui:signAndExecuteTransactionBlock"];
+    if (legacyFeature) {
+      const transactionBlock = Transaction.from(await transaction.toJSON());
+      return legacyFeature.signAndExecuteTransactionBlock({
+        transactionBlock,
+        account,
+        chain: "sui:testnet",
+        options: {
+          showRawEffects: true,
+          showRawInput: true,
+        },
+      });
+    }
+
+    throw new Error("The connected wallet does not support transaction execution.");
+  };
  
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
@@ -161,7 +238,7 @@ function GameContainer() {
       const timestamp = Date.now();
       const message = `Authorize withdrawal for wallet: ${account.address}, nonce: ${nonce}, timestamp: ${timestamp}`;
       const encodedMessage = new TextEncoder().encode(message);
-      const signed = await signPersonalMessage({ message: encodedMessage, chain: "sui:testnet" });
+      const signed = await signMessageWithWallet(encodedMessage);
 
       const res = await fetch(`${BACKEND_URL}/withdraw`, {
         method: "POST",
@@ -258,7 +335,7 @@ function GameContainer() {
       });
       tx.transferObjects([depositCoin], SLOT_WALLET_ADDRESS);
 
-      await signAndExecuteTransaction({ transaction: tx, chain: "sui:testnet" });
+      await executeTransactionWithWallet(tx);
 
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
@@ -471,7 +548,15 @@ function GameContainer() {
   return (
     <div className="app-container">
       <div className="left-panel">
-        <ConnectButton />
+        {connected ? (
+          <button className="btn" onClick={handleDisconnect}>
+            Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
+          </button>
+        ) : (
+          <button className="btn" onClick={handleConnect}>
+            Connect Wallet
+          </button>
+        )}
 	    <audio ref={backgroundMusicRef} src="/slot/flow-theme.mp3" loop />
         {isWalletReady ? (
           <>
@@ -625,11 +710,9 @@ function GameContainer() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
-        <WalletProvider autoConnect>
-          <GameContainer />
-        </WalletProvider>
-      </SuiClientProvider>
+      <WalletProvider autoConnect>
+        <GameContainer />
+      </WalletProvider>
     </QueryClientProvider>
   );
 }
