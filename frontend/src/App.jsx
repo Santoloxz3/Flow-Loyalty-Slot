@@ -105,10 +105,19 @@ function GameContainer() {
       throw new Error("No wallet connected.");
     }
 
+    const walletTransaction = {
+      async toJSON() {
+        return transaction.toJSON({ client });
+      },
+      setSenderIfNotSet(address) {
+        transaction.setSenderIfNotSet(address);
+      },
+    };
+
     const signAndExecuteFeature = currentWallet.features["sui:signAndExecuteTransaction"];
     if (signAndExecuteFeature) {
       return signAndExecuteFeature.signAndExecuteTransaction({
-        transaction,
+        transaction: walletTransaction,
         account,
         chain: "sui:testnet",
       });
@@ -116,7 +125,7 @@ function GameContainer() {
 
     const legacyFeature = currentWallet.features["sui:signAndExecuteTransactionBlock"];
     if (legacyFeature) {
-      const transactionBlock = Transaction.from(await transaction.toJSON());
+      const transactionBlock = Transaction.from(await transaction.toJSON({ client }));
       return legacyFeature.signAndExecuteTransactionBlock({
         transactionBlock,
         account,
