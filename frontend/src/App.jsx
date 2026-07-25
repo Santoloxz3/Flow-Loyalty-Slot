@@ -13,6 +13,26 @@ const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
 
+async function fetchAllCoins({ owner, coinType }) {
+  const allCoins = [];
+  let cursor;
+
+  for (let page = 0; page < 50; page += 1) {
+    const response = await client.listCoins({ owner, coinType, cursor });
+    const pageCoins = response.objects || response.data || [];
+
+    allCoins.push(...pageCoins);
+
+    const nextCursor = response.nextCursor ?? response.cursor?.next;
+    const hasNextPage = response.hasNextPage ?? Boolean(nextCursor);
+
+    if (!hasNextPage || !nextCursor) break;
+    cursor = nextCursor;
+  }
+
+  return allCoins;
+}
+
 
 function GameContainer() {
   const { connected, account, signAndExecuteTransaction, signTransaction, signPersonalMessage } = useWallet();
@@ -220,8 +240,16 @@ function GameContainer() {
         console.warn("[deposit] Unable to pre-check SUI gas balance, continuing with transaction build", gasError);
       }
 
-      const coins = await client.listCoins({ owner: account.address, coinType: FLOW_COIN_TYPE });
-      const flowCoins = [...(coins.objects || [])].sort(
+      const flowBalanceResponse = await client.getBalance({
+        owner: account.address,
+        coinType: FLOW_COIN_TYPE,
+      });
+      const expectedTotalBalance = BigInt(flowBalanceResponse.balance?.balance || "0");
+
+      const flowCoins = [...await fetchAllCoins({
+        owner: account.address,
+        coinType: FLOW_COIN_TYPE,
+      })].sort(
         (a, b) => Number(BigInt(b.balance) - BigInt(a.balance)),
       );
 
@@ -234,12 +262,22 @@ function GameContainer() {
       console.info("[deposit] FLOW coin objects loaded", {
         address: account.address,
         requestedAmount: amountBigInt.toString(),
+        expectedTotalBalance: expectedTotalBalance.toString(),
         totalAvailable: totalAvailable.toString(),
         objects: flowCoins.map((coin) => ({
           objectId: coin.objectId,
           balance: coin.balance,
         })),
       });
+
+      if (expectedTotalBalance > totalAvailable) {
+        console.warn("[deposit] FLOW balance mismatch between getBalance and listCoins", {
+          address: account.address,
+          expectedTotalBalance: expectedTotalBalance.toString(),
+          totalAvailable: totalAvailable.toString(),
+          coinType: FLOW_COIN_TYPE,
+        });
+      }
 
       if (totalAvailable < amountBigInt) {
         toast.error(`Insufficient FLOW balance for ${amount} FLOW deposit.`);
