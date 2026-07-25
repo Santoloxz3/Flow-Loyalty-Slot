@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import {
   WalletProvider,
+  SuiClientProvider,
   useCurrentAccount,
   useCurrentWallet,
   useWallets,
@@ -21,6 +22,10 @@ const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
 const queryClient = new QueryClient();
+const networkConfig = {
+  testnet: { url: "https://fullnode.testnet.sui.io:443" },
+};
+const createStubSuiClient = () => ({});
 
 function GameContainer() {
   const account = useCurrentAccount();
@@ -710,9 +715,11 @@ function GameContainer() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <WalletProvider autoConnect>
-        <GameContainer />
-      </WalletProvider>
+      <SuiClientProvider networks={networkConfig} defaultNetwork="testnet" createClient={createStubSuiClient}>
+        <WalletProvider autoConnect>
+          <GameContainer />
+        </WalletProvider>
+      </SuiClientProvider>
     </QueryClientProvider>
   );
 }
