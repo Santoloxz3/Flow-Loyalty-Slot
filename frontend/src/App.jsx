@@ -23,7 +23,7 @@ async function fetchAllCoins({ owner, coinType }) {
 
     allCoins.push(...pageCoins);
 
-    const nextCursor = response.nextCursor ?? response.cursor?.next;
+    const nextCursor = response.cursor ?? response.nextCursor ?? null;
     const hasNextPage = response.hasNextPage ?? Boolean(nextCursor);
 
     if (!hasNextPage || !nextCursor) break;
