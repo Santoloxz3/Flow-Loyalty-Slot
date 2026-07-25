@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
 import "@suiet/wallet-kit/style.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { Transaction } from "../node_modules/@suiet/wallet-kit/node_modules/@mysten/sui/dist/esm/transactions/index.js";
+import { Transaction, coinWithBalance } from "../node_modules/@suiet/wallet-kit/node_modules/@mysten/sui/dist/esm/transactions/index.js";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import "./App.css";
@@ -243,7 +243,7 @@ function GameContainer() {
       const tx = new Transaction();
       tx.setSender(account.address);
       tx.setGasBudget(minGasBudget);
-      const depositCoin = tx.coin({
+      const depositCoin = coinWithBalance({
         balance: amountBigInt,
         type: FLOW_COIN_TYPE,
       });
