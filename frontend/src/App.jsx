@@ -38,6 +38,7 @@ function GameContainer() {
   };
 
   const base64ToBytes = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+  const bytesToBase64 = (value) => btoa(String.fromCharCode(...value));
 
 
   const postBalanceToGame = (balance) => {
@@ -249,23 +250,20 @@ function GameContainer() {
       });
       tx.transferObjects([depositCoin], SLOT_WALLET_ADDRESS);
 
-      if (isNightlyMobile()) {
-        console.info("[deposit] Nightly mobile detected, using sign + execute fallback");
-        const preparedBytes = await tx.build({ client });
-        const signedTx = await signTransaction({ transaction: Transaction.from(preparedBytes) });
-        const execution = await client.executeTransaction({
-          transaction: base64ToBytes(signedTx.bytes),
-          signatures: [signedTx.signature],
-          include: { effects: true },
-        });
+      // Build transaction bytes locally to avoid cross-version serialization issues
+      // between the app's Sui SDK and the wallet kit's embedded Sui SDK.
+      const preparedBytes = await tx.build({ client });
+      const signedTx = await signTransaction({ transaction: bytesToBase64(preparedBytes) });
+      const execution = await client.executeTransaction({
+        transaction: base64ToBytes(signedTx.bytes),
+        signatures: [signedTx.signature],
+        include: { effects: true },
+      });
 
-        if (execution.$kind === "FailedTransaction") {
-          throw new Error(
-            execution.FailedTransaction.status?.error?.message || "Transaction execution failed on Nightly mobile.",
-          );
-        }
-      } else {
-        await signAndExecuteTransaction({ transaction: tx });
+      if (execution.$kind === "FailedTransaction") {
+        throw new Error(
+          execution.FailedTransaction.status?.error?.message || "Transaction execution failed.",
+        );
       }
 
       await updateSlotBalance(account.address, amount);
