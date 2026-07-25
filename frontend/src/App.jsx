@@ -1,9 +1,19 @@
 import React, { useEffect, useState, useRef } from "react";
-import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
-import "@suiet/wallet-kit/style.css";
+import {
+  WalletProvider,
+  SuiClientProvider,
+  ConnectButton,
+  createNetworkConfig,
+  useCurrentAccount,
+  useCurrentWallet,
+  useSignAndExecuteTransaction,
+  useSignPersonalMessage,
+} from "@mysten/dapp-kit";
+import "@mysten/dapp-kit/dist/index.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { Transaction, coinWithBalance } from "../node_modules/@suiet/wallet-kit/node_modules/@mysten/sui/dist/esm/transactions/index.js";
+import { Transaction } from "@mysten/sui/transactions";
 import { ToastContainer, toast } from "react-toastify";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import 'react-toastify/dist/ReactToastify.css';
 import "./App.css";
 
@@ -12,9 +22,16 @@ const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc21
 const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
+const queryClient = new QueryClient();
+const { networkConfig } = createNetworkConfig({
+  testnet: { url: "https://fullnode.testnet.sui.io" },
+});
 
 function GameContainer() {
-  const { connected, account, signAndExecuteTransaction, signTransaction, signPersonalMessage } = useWallet();
+  const account = useCurrentAccount();
+  const { isConnected: connected } = useCurrentWallet();
+  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage();
   const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
   const [balanceStatus, setBalanceStatus] = useState("idle");
@@ -32,14 +49,6 @@ function GameContainer() {
   const lastSpinGrantedRef = useRef(false);
   const backgroundMusicRef = useRef(null);
  
-  const isNightlyMobile = () => {
-    if (typeof navigator === "undefined") return false;
-    return /Nightly/i.test(navigator.userAgent) && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
-  };
-
-  const base64ToBytes = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-
-
   const postBalanceToGame = (balance) => {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
   };
@@ -152,7 +161,7 @@ function GameContainer() {
       const timestamp = Date.now();
       const message = `Authorize withdrawal for wallet: ${account.address}, nonce: ${nonce}, timestamp: ${timestamp}`;
       const encodedMessage = new TextEncoder().encode(message);
-      const signed = await signPersonalMessage({ message: encodedMessage });
+      const signed = await signPersonalMessage({ message: encodedMessage, chain: "sui:testnet" });
 
       const res = await fetch(`${BACKEND_URL}/withdraw`, {
         method: "POST",
@@ -243,13 +252,13 @@ function GameContainer() {
       const tx = new Transaction();
       tx.setSender(account.address);
       tx.setGasBudget(minGasBudget);
-      const depositCoin = coinWithBalance({
+      const depositCoin = tx.coin({
         balance: amountBigInt,
         type: FLOW_COIN_TYPE,
       });
       tx.transferObjects([depositCoin], SLOT_WALLET_ADDRESS);
 
-      await signAndExecuteTransaction({ transaction: tx });
+      await signAndExecuteTransaction({ transaction: tx, chain: "sui:testnet" });
 
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
@@ -615,8 +624,12 @@ function GameContainer() {
 
 export default function App() {
   return (
-    <WalletProvider>
-      <GameContainer />
-    </WalletProvider>
+    <QueryClientProvider client={queryClient}>
+      <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
+        <WalletProvider autoConnect>
+          <GameContainer />
+        </WalletProvider>
+      </SuiClientProvider>
+    </QueryClientProvider>
   );
 }
