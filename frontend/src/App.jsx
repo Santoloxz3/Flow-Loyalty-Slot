@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { WalletProvider, useWallet, ConnectButton } from "@suiet/wallet-kit";
 import "@suiet/wallet-kit/style.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { Transaction } from "@mysten/sui/transactions";
+import { Transaction } from "../node_modules/@suiet/wallet-kit/node_modules/@mysten/sui/dist/esm/transactions/index.js";
 import { ToastContainer, toast } from "react-toastify";
 import 'react-toastify/dist/ReactToastify.css';
 import "./App.css";
@@ -38,7 +38,6 @@ function GameContainer() {
   };
 
   const base64ToBytes = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-  const bytesToBase64 = (value) => btoa(String.fromCharCode(...value));
 
 
   const postBalanceToGame = (balance) => {
@@ -250,21 +249,7 @@ function GameContainer() {
       });
       tx.transferObjects([depositCoin], SLOT_WALLET_ADDRESS);
 
-      // Build transaction bytes locally to avoid cross-version serialization issues
-      // between the app's Sui SDK and the wallet kit's embedded Sui SDK.
-      const preparedBytes = await tx.build({ client });
-      const signedTx = await signTransaction({ transaction: bytesToBase64(preparedBytes) });
-      const execution = await client.executeTransaction({
-        transaction: base64ToBytes(signedTx.bytes),
-        signatures: [signedTx.signature],
-        include: { effects: true },
-      });
-
-      if (execution.$kind === "FailedTransaction") {
-        throw new Error(
-          execution.FailedTransaction.status?.error?.message || "Transaction execution failed.",
-        );
-      }
+      await signAndExecuteTransaction({ transaction: tx });
 
       await updateSlotBalance(account.address, amount);
       await fetchBalances();
