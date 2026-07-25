@@ -13,27 +13,6 @@ const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
 
-async function fetchAllCoins({ owner, coinType }) {
-  const allCoins = [];
-  let cursor;
-
-  for (let page = 0; page < 50; page += 1) {
-    const response = await client.listCoins({ owner, coinType, cursor });
-    const pageCoins = response.objects || response.data || [];
-
-    allCoins.push(...pageCoins);
-
-    const nextCursor = response.cursor ?? response.nextCursor ?? null;
-    const hasNextPage = response.hasNextPage ?? Boolean(nextCursor);
-
-    if (!hasNextPage || !nextCursor) break;
-    cursor = nextCursor;
-  }
-
-  return allCoins;
-}
-
-
 function GameContainer() {
   const { connected, account, signAndExecuteTransaction, signTransaction, signPersonalMessage } = useWallet();
   const [suiBalance, setSuiBalance] = useState(null);
@@ -245,67 +224,30 @@ function GameContainer() {
         coinType: FLOW_COIN_TYPE,
       });
       const expectedTotalBalance = BigInt(flowBalanceResponse.balance?.balance || "0");
+      const coinBalance = BigInt(flowBalanceResponse.balance?.coinBalance || "0");
+      const addressBalance = BigInt(flowBalanceResponse.balance?.addressBalance || "0");
 
-      const flowCoins = [...await fetchAllCoins({
-        owner: account.address,
-        coinType: FLOW_COIN_TYPE,
-      })].sort(
-        (a, b) => Number(BigInt(b.balance) - BigInt(a.balance)),
-      );
-
-      if (!flowCoins.length) {
-        toast.error("No FLOW coins found in the wallet.");
-        return;
-      }
-
-      const totalAvailable = flowCoins.reduce((sum, coin) => sum + BigInt(coin.balance), 0n);
       console.info("[deposit] FLOW coin objects loaded", {
         address: account.address,
         requestedAmount: amountBigInt.toString(),
         expectedTotalBalance: expectedTotalBalance.toString(),
-        totalAvailable: totalAvailable.toString(),
-        objects: flowCoins.map((coin) => ({
-          objectId: coin.objectId,
-          balance: coin.balance,
-        })),
+        coinBalance: coinBalance.toString(),
+        addressBalance: addressBalance.toString(),
       });
 
-      if (expectedTotalBalance > totalAvailable) {
-        console.warn("[deposit] FLOW balance mismatch between getBalance and listCoins", {
-          address: account.address,
-          expectedTotalBalance: expectedTotalBalance.toString(),
-          totalAvailable: totalAvailable.toString(),
-          coinType: FLOW_COIN_TYPE,
-        });
-      }
-
-      if (totalAvailable < amountBigInt) {
+      if (expectedTotalBalance < amountBigInt) {
         toast.error(`Insufficient FLOW balance for ${amount} FLOW deposit.`);
         return;
-      }
-
-      const selectedCoins = [];
-      let collectedBalance = 0n;
-      for (const coin of flowCoins) {
-        selectedCoins.push(coin);
-        collectedBalance += BigInt(coin.balance);
-        if (collectedBalance >= amountBigInt) break;
       }
 
       const tx = new Transaction();
       tx.setSender(account.address);
       tx.setGasBudget(minGasBudget);
-      const primaryCoin = tx.object(selectedCoins[0].objectId);
-
-      if (selectedCoins.length > 1) {
-        tx.mergeCoins(
-          primaryCoin,
-          selectedCoins.slice(1).map((coin) => tx.object(coin.objectId)),
-        );
-      }
-
-      const [splitCoin] = tx.splitCoins(primaryCoin, [amountBigInt]);
-      tx.transferObjects([splitCoin], SLOT_WALLET_ADDRESS);
+      const depositCoin = tx.coin({
+        balance: amountBigInt,
+        type: FLOW_COIN_TYPE,
+      });
+      tx.transferObjects([depositCoin], SLOT_WALLET_ADDRESS);
 
       if (isNightlyMobile()) {
         console.info("[deposit] Nightly mobile detected, using sign + execute fallback");
