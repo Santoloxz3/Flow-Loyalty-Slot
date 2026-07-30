@@ -50,6 +50,17 @@ function GameContainer() {
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
   const lastSpinGrantedRef = useRef(false);
   const backgroundMusicRef = useRef(null);
+  const balancePostTimersRef = useRef([]);
+  const balanceRefreshTimersRef = useRef([]);
+  const [isMuted, setIsMuted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("flow-slot-muted") === "1";
+  });
+
+  const clearTimers = (timersRef) => {
+    timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    timersRef.current = [];
+  };
 
   const handleConnect = async () => {
     try {
@@ -144,6 +155,25 @@ function GameContainer() {
     document.querySelector("iframe")?.contentWindow?.postMessage({ type: "UPDATE_BALANCE", balance }, "*");
   };
 
+  const syncBalanceToGame = (balance) => {
+    clearTimers(balancePostTimersRef);
+    postBalanceToGame(balance);
+    [400, 1500].forEach((delay) => {
+      const timerId = window.setTimeout(() => postBalanceToGame(balance), delay);
+      balancePostTimersRef.current.push(timerId);
+    });
+  };
+
+  const scheduleBalanceRefresh = () => {
+    clearTimers(balanceRefreshTimersRef);
+    [1500, 5000, 12000].forEach((delay) => {
+      const timerId = window.setTimeout(() => {
+        fetchBalances({ silent: true });
+      }, delay);
+      balanceRefreshTimersRef.current.push(timerId);
+    });
+  };
+
   const fetchFreeSpins = async () => {
     if (!account?.address) return;
     try {
@@ -174,7 +204,7 @@ function GameContainer() {
 	  const data = await res.json();
 	  const balance = data.balance ?? 0;
 	  setSlotBalance(balance);
-	  setTimeout(() => postBalanceToGame(balance), 2000);
+	  syncBalanceToGame(balance);
     } catch (err) {
 	  console.error("Error loading balance:", err);
     }
@@ -190,15 +220,16 @@ function GameContainer() {
       });
       const data = await res.json();
       setSlotBalance(data.balance);
-      postBalanceToGame(data.balance);
+      syncBalanceToGame(data.balance);
     } catch (err) {
       console.error("Error updating balance:", err);
     }
   };
 
 
-  const fetchBalances = async () => {
-    if (!account?.address) {
+  const fetchBalances = async ({ silent = false } = {}) => {
+    const walletAddress = account?.address;
+    if (!walletAddress) {
       setSuiBalance(null);
       setFLOWBalance(null);
       setBalanceStatus("idle");
@@ -206,17 +237,21 @@ function GameContainer() {
       return;
     }
 
-    setBalanceStatus("loading");
+    if (!silent) {
+      const hasKnownBalances = suiBalance !== null || FLOWBalance !== null;
+      setBalanceStatus(hasKnownBalances ? "refreshing" : "loading");
+    }
     setBalanceError("");
 
     try {
       console.info("[wallet] Fetching balances from Sui testnet gRPC", {
-        address: account.address,
+        address: walletAddress,
+        silent,
       });
 
       const [suiBalanceResponse, flowBalanceResponse] = await Promise.all([
-        client.getBalance({ owner: account.address }),
-        client.getBalance({ owner: account.address, coinType: FLOW_COIN_TYPE }),
+        client.getBalance({ owner: walletAddress }),
+        client.getBalance({ owner: walletAddress, coinType: FLOW_COIN_TYPE }),
       ]);
 
       const nextSuiBalance = Number(suiBalanceResponse.balance?.balance || "0") / 1e9;
@@ -224,23 +259,25 @@ function GameContainer() {
 
       setSuiBalance(nextSuiBalance);
       setFLOWBalance(nextFlowBalance);
-      await loadSlotBalance(account.address);
+      await loadSlotBalance(walletAddress);
       setBalanceStatus("ready");
       console.info("[wallet] Balances loaded", {
-        address: account.address,
+        address: walletAddress,
         sui: nextSuiBalance,
         flow: nextFlowBalance,
       });
     } catch (error) {
       console.error("[wallet] Failed to fetch balances", {
-        address: account.address,
+        address: walletAddress,
         error,
       });
-      setSuiBalance(null);
-      setFLOWBalance(null);
-      setBalanceStatus("error");
-      setBalanceError("Unable to load SUI/FLOW balances from Sui testnet. Reconnect Nightly or retry in a moment.");
-      toast.error("Unable to fetch SUI/FLOW balances");
+      if (!silent) {
+        setSuiBalance(null);
+        setFLOWBalance(null);
+        setBalanceStatus("error");
+        setBalanceError("Unable to load SUI/FLOW balances from Sui testnet. Reconnect Nightly or retry in a moment.");
+        toast.error("Unable to fetch SUI/FLOW balances");
+      }
     }
   };
 
@@ -264,7 +301,8 @@ function GameContainer() {
       if (res.ok) {
         toast.success(`Withdrawal completed: ${result.amount} $FLOW`);
         await loadSlotBalance(account.address);
-        await fetchBalances();
+        await fetchBalances({ silent: true });
+        scheduleBalanceRefresh();
       } else {
         toast.error(result.message || "Error during withdrawal");
       }
@@ -352,7 +390,8 @@ function GameContainer() {
       await executeTransactionWithWallet(tx);
 
       await updateSlotBalance(account.address, amount);
-      await fetchBalances();
+      await fetchBalances({ silent: true });
+      scheduleBalanceRefresh();
       toast.success(`Deposit completed: ${amount} $FLOW`);
     } catch (e) {
       console.error("❌ Errore durante il deposito:", e);
@@ -380,7 +419,9 @@ function GameContainer() {
   useEffect(() => {
     const handleFirstClick = () => {
 	  if (backgroundMusicRef.current) {
-		backgroundMusicRef.current.volume = 0.2;  
+		backgroundMusicRef.current.volume = 0.2;
+        backgroundMusicRef.current.muted = isMuted;
+        if (isMuted) return;
 	    backgroundMusicRef.current.play().catch((err) => {
 		  console.warn("⚠️ Autoplay bloccato o fallito:", err);
 	    });
@@ -393,7 +434,16 @@ function GameContainer() {
     return () => {
 	  document.removeEventListener("click", handleFirstClick);
     };
-  }, []);
+  }, [isMuted]);
+
+  useEffect(() => {
+    if (!backgroundMusicRef.current) return;
+    backgroundMusicRef.current.muted = isMuted;
+    window.localStorage.setItem("flow-slot-muted", isMuted ? "1" : "0");
+    if (!isMuted) {
+      backgroundMusicRef.current.play().catch(() => {});
+    }
+  }, [isMuted]);
 
 
 
@@ -480,8 +530,11 @@ function GameContainer() {
 	    lastSpinGrantedRef.current = false;	  
 	    const amount = Number(data.amount || 0);
 	    if (amount > 0) {
-	      const winAudio = new Audio("/slot/win-sound.wav");
-		  winAudio.play();
+	      if (!isMuted) {
+            const winAudio = new Audio("/slot/win-sound.wav");
+            winAudio.volume = 0.45;
+		    winAudio.play().catch(() => {});
+          }
 
 	  	  setFlashWin(true);
 		  setGlowWin(true);
@@ -550,14 +603,41 @@ function GameContainer() {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [connected, account, slotBalance]);
+  }, [connected, account, slotBalance, isMuted]);
 
   useEffect(() => {
     if (slotBalance !== null) {
 	  console.log("📤 React invia balance aggiornato al gioco:", slotBalance);
-	  setTimeout(() => postBalanceToGame(slotBalance), 5000);
+	  syncBalanceToGame(slotBalance);
     }
   }, [slotBalance]);
+
+  useEffect(() => {
+    if (!connected || !account?.address) return undefined;
+
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchBalances({ silent: true });
+      }
+    };
+
+    const handleFocusRefresh = () => {
+      fetchBalances({ silent: true });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityRefresh);
+    window.addEventListener("focus", handleFocusRefresh);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityRefresh);
+      window.removeEventListener("focus", handleFocusRefresh);
+    };
+  }, [connected, account?.address]);
+
+  useEffect(() => () => {
+    clearTimers(balancePostTimersRef);
+    clearTimers(balanceRefreshTimersRef);
+  }, []);
 
   return (
     <div className="app-container">
@@ -575,8 +655,17 @@ function GameContainer() {
         {isWalletReady ? (
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
+              <button
+                type="button"
+                className="music-toggle"
+                onClick={() => setIsMuted((prev) => !prev)}
+                aria-label={isMuted ? "Attiva musica" : "Disattiva musica"}
+                title={isMuted ? "Attiva musica" : "Disattiva musica"}
+              >
+                {isMuted ? "🔇" : "🔊"}
+              </button>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
-              <p><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {balanceStatus === "loading" ? "Fetching..." : (FLOWBalance ?? "--")}</p>
+              <p><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
               <p><span className="wallet-line-icon" aria-hidden="true">🎰</span><strong> FLOW Slot:</strong> {slotBalance}</p>
               {balanceError ? <p className="wallet-warning">{balanceError}</p> : null}
               {freeSpinsLeft > 0 && (
@@ -671,15 +760,7 @@ function GameContainer() {
 		    className="game-frame"
 		    onLoad={() => {
 		  	  console.log("📥 iframe caricato");
-			  const checkBalanceReady = setInterval(() => {
-			    if (slotBalance > 0) {
-				  console.log("✅ Balance pronto, invio al gioco:", slotBalance);
-				  postBalanceToGame(slotBalance);
-				  clearInterval(checkBalanceReady);
-			    } else {
-				   console.log("⏳ In attesa che slotBalance sia > 0...");
-			    }
-			  }, 300); // controlla ogni 300ms
+			  syncBalanceToGame(slotBalance ?? 0);
 		    }}
 		  />
         </div>
