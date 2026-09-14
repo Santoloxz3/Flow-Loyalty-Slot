@@ -681,18 +681,18 @@ function GameContainer() {
           </button>
         )}
 	    <audio ref={backgroundMusicRef} src="/slot/flow-theme.mp3" loop />
+        <button
+          type="button"
+          className="music-toggle panel-music-toggle"
+          onClick={() => setIsMuted((prev) => !prev)}
+          aria-label={isMuted ? "Attiva musica" : "Disattiva musica"}
+          title={isMuted ? "Attiva musica" : "Disattiva musica"}
+        >
+          {isMuted ? "🔇" : "🔊"}
+        </button>
         {isWalletReady ? (
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
-              <button
-                type="button"
-                className="music-toggle"
-                onClick={() => setIsMuted((prev) => !prev)}
-                aria-label={isMuted ? "Attiva musica" : "Disattiva musica"}
-                title={isMuted ? "Attiva musica" : "Disattiva musica"}
-              >
-                {isMuted ? "🔇" : "🔊"}
-              </button>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
               <p><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
               <p><span className="wallet-line-icon" aria-hidden="true">🎰</span><strong> FLOW Slot:</strong> {slotBalance}</p>
