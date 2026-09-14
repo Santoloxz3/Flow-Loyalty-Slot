@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   WalletProvider,
   SuiClientProvider,
-  ConnectModal,
   useCurrentAccount,
   useCurrentWallet,
+  useWallets,
+  useConnectWallet,
   useDisconnectWallet,
 } from "@mysten/dapp-kit";
 import "@mysten/dapp-kit/dist/index.css";
@@ -30,6 +31,8 @@ function GameContainer() {
   const account = useCurrentAccount();
   const walletState = useCurrentWallet();
   const { isConnected: connected, currentWallet } = walletState;
+  const wallets = useWallets();
+  const { mutateAsync: connectWallet } = useConnectWallet();
   const { mutateAsync: disconnectWallet } = useDisconnectWallet();
   const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
@@ -42,6 +45,8 @@ function GameContainer() {
   const [flashWin, setFlashWin] = useState(false);
   const [glowWin, setGlowWin] = useState(false);
   const [showLogModal, setShowLogModal] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [connectingWalletName, setConnectingWalletName] = useState("");
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
@@ -57,6 +62,23 @@ function GameContainer() {
   const clearTimers = (timersRef) => {
     timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
     timersRef.current = [];
+  };
+
+  const handleConnectWallet = async (wallet) => {
+    setConnectingWalletName(wallet.name);
+    try {
+      await connectWallet({ wallet, silent: false });
+      setShowWalletModal(false);
+    } catch (error) {
+      console.error("Error connecting wallet:", {
+        wallet: wallet.name,
+        message: error?.message,
+        error,
+      });
+      toast.error(error?.message || `${wallet.name} connection failed`);
+    } finally {
+      setConnectingWalletName("");
+    }
   };
 
   const handleDisconnect = async () => {
@@ -630,13 +652,19 @@ function GameContainer() {
             Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
           </button>
         ) : (
-          <ConnectModal
-            trigger={
-              <button className="btn" type="button">
-                Connect Wallet
-              </button>
-            }
-          />
+          <button
+            className="btn"
+            type="button"
+            onClick={() => {
+              if (wallets.length === 0) {
+                toast.error("No Sui wallet found on this device.");
+                return;
+              }
+              setShowWalletModal(true);
+            }}
+          >
+            Connect Wallet
+          </button>
         )}
 	    <audio ref={backgroundMusicRef} src="/slot/flow-theme.mp3" loop />
         {isWalletReady ? (
@@ -770,6 +798,30 @@ function GameContainer() {
 		  </div>
 	    </div>
 	  )}
+
+      {showWalletModal && (
+        <div className="log-modal-backdrop" onClick={() => setShowWalletModal(false)}>
+          <div className="log-modal wallet-select-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Connect Wallet</h2>
+            <div className="wallet-select-list">
+              {wallets.map((wallet) => (
+                <button
+                  key={wallet.id ?? wallet.name}
+                  type="button"
+                  className="wallet-select-option"
+                  onClick={() => handleConnectWallet(wallet)}
+                  disabled={Boolean(connectingWalletName)}
+                >
+                  {wallet.icon ? <img src={wallet.icon} alt="" /> : <span className="wallet-fallback-icon">◆</span>}
+                  <span>{wallet.name}</span>
+                  {connectingWalletName === wallet.name ? <small>Connecting...</small> : null}
+                </button>
+              ))}
+            </div>
+            <button className="btn btn-close" onClick={() => setShowWalletModal(false)}>✖ Close</button>
+          </div>
+        </div>
+      )}
 	  
       {showLogModal && (
         <div className="log-modal-backdrop" onClick={() => setShowLogModal(false)}>
@@ -793,7 +845,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SuiClientProvider networks={networkConfig} defaultNetwork="testnet" createClient={createStubSuiClient}>
-        <WalletProvider slushWallet={{ name: "Slush" }}>
+        <WalletProvider preferredWallets={["Nightly", "Slush", "Sui Wallet"]}>
           <GameContainer />
         </WalletProvider>
       </SuiClientProvider>

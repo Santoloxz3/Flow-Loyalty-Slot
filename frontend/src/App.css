@@ -319,6 +319,63 @@
   border-bottom: 1px solid #444;
 }
 
+.wallet-select-modal {
+  max-width: 420px;
+}
+
+.wallet-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.wallet-select-option {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.wallet-select-option:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.wallet-select-option img,
+.wallet-fallback-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  flex: 0 0 34px;
+}
+
+.wallet-fallback-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+}
+
+.wallet-select-option span {
+  flex: 1;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.wallet-select-option small {
+  color: #00ffff;
+  font-size: 0.8rem;
+}
+
 .btn-close {
   background-color: #e74c3c;
   width: 100%;
