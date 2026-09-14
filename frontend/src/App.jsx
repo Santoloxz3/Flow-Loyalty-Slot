@@ -64,6 +64,20 @@ function GameContainer() {
     timersRef.current = [];
   };
 
+  const getWalletConnectionMessage = (walletName, error) => {
+    const message = error?.message || "";
+    if (/set up your wallet/i.test(message)) {
+      return `${walletName}: open the wallet extension and finish setup before connecting.`;
+    }
+    if (/reject|denied|cancel/i.test(message)) {
+      return `${walletName}: connection was cancelled in the wallet.`;
+    }
+    if (message) {
+      return message;
+    }
+    return `${walletName}: open/unlock the wallet extension, finish setup, then retry.`;
+  };
+
   const handleConnectWallet = async (wallet) => {
     setConnectingWalletName(wallet.name);
     try {
@@ -75,7 +89,7 @@ function GameContainer() {
         message: error?.message,
         error,
       });
-      toast.error(error?.message || `${wallet.name} connection failed`);
+      toast.error(getWalletConnectionMessage(wallet.name, error));
     } finally {
       setConnectingWalletName("");
     }
@@ -803,6 +817,7 @@ function GameContainer() {
         <div className="log-modal-backdrop" onClick={() => setShowWalletModal(false)}>
           <div className="log-modal wallet-select-modal" onClick={(e) => e.stopPropagation()}>
             <h2>Connect Wallet</h2>
+            <p className="wallet-select-hint">Open and unlock the wallet extension before selecting it.</p>
             <div className="wallet-select-list">
               {wallets.map((wallet) => (
                 <button
