@@ -37,11 +37,11 @@
   display: none;
 }
 
-.wallet-box p:nth-child(2) {
+.wallet-balance-line {
   margin: 0;
 }
 
-.wallet-box p:nth-child(3) {
+.slot-balance-line {
   margin: 0;
   margin-top: 2rem;
 }
@@ -203,7 +203,7 @@
   100% { background-color: transparent; }
 }
 
-.wallet-box.flash-win p:nth-child(3) {
+.wallet-box.flash-win .slot-balance-line {
   animation: balanceWinFlash 1s ease;
 }
 
@@ -659,8 +659,8 @@
     padding: 0.8rem 1rem;
   }
 
-  .wallet-box p:nth-child(2),
-  .wallet-box p:nth-child(3) {
+  .wallet-balance-line,
+  .slot-balance-line {
     font-size: 1.3rem;
   }
 
