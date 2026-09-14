@@ -2,10 +2,9 @@ import React, { useEffect, useState, useRef } from "react";
 import {
   WalletProvider,
   SuiClientProvider,
+  ConnectModal,
   useCurrentAccount,
   useCurrentWallet,
-  useWallets,
-  useConnectWallet,
   useDisconnectWallet,
 } from "@mysten/dapp-kit";
 import "@mysten/dapp-kit/dist/index.css";
@@ -31,8 +30,6 @@ function GameContainer() {
   const account = useCurrentAccount();
   const walletState = useCurrentWallet();
   const { isConnected: connected, currentWallet } = walletState;
-  const wallets = useWallets();
-  const { mutateAsync: connectWallet } = useConnectWallet();
   const { mutateAsync: disconnectWallet } = useDisconnectWallet();
   const [suiBalance, setSuiBalance] = useState(null);
   const [FLOWBalance, setFLOWBalance] = useState(null);
@@ -60,20 +57,6 @@ function GameContainer() {
   const clearTimers = (timersRef) => {
     timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
     timersRef.current = [];
-  };
-
-  const handleConnect = async () => {
-    try {
-      const preferredWallet = wallets.find((wallet) => /nightly/i.test(wallet.name)) ?? wallets[0];
-      if (!preferredWallet) {
-        toast.error("No Sui wallet found on this device.");
-        return;
-      }
-      await connectWallet({ wallet: preferredWallet });
-    } catch (error) {
-      console.error("Error connecting wallet:", error);
-      toast.error(error?.message || "Wallet connection failed");
-    }
   };
 
   const handleDisconnect = async () => {
@@ -647,9 +630,13 @@ function GameContainer() {
             Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
           </button>
         ) : (
-          <button className="btn" onClick={handleConnect}>
-            Connect Wallet
-          </button>
+          <ConnectModal
+            trigger={
+              <button className="btn" type="button">
+                Connect Wallet
+              </button>
+            }
+          />
         )}
 	    <audio ref={backgroundMusicRef} src="/slot/flow-theme.mp3" loop />
         {isWalletReady ? (
@@ -806,7 +793,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SuiClientProvider networks={networkConfig} defaultNetwork="testnet" createClient={createStubSuiClient}>
-        <WalletProvider autoConnect>
+        <WalletProvider slushWallet={{ name: "Slush" }}>
           <GameContainer />
         </WalletProvider>
       </SuiClientProvider>
