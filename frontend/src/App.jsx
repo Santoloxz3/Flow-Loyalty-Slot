@@ -97,6 +97,7 @@ function GameContainer() {
 
   const handleDisconnect = async () => {
     try {
+      setIsWalletReady(false);
       await disconnectWallet();
     } catch (error) {
       console.error("Error disconnecting wallet:", error);
@@ -658,6 +659,8 @@ function GameContainer() {
     clearTimers(balanceRefreshTimersRef);
   }, []);
 
+  const canShowWalletPanel = Boolean(isWalletReady && connected && account?.address);
+
   return (
     <div className="app-container">
       <div className="left-panel">
@@ -690,7 +693,7 @@ function GameContainer() {
         >
           {isMuted ? "🔇" : "🔊"}
         </button>
-        {isWalletReady ? (
+        {canShowWalletPanel ? (
           <>
             <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
