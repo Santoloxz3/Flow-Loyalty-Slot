@@ -43,6 +43,8 @@ const DEFAULT_STAKING_REWARD_FUNDING = {
   Whale: 30_000,
 };
 const U64_MAX_VALUE = 18_446_744_073_709_551_615n;
+const SECONDS_PER_DAY = 86_400;
+const SECONDS_PER_YEAR = 31_536_000;
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
 const readClient = new SuiJsonRpcClient({ network: "testnet", url: TESTNET_RPC_URL });
 const queryClient = new QueryClient();
@@ -52,9 +54,9 @@ const networkConfig = {
 const createStubSuiClient = () => ({});
 
 const STAKING_PLANS = [
-  { name: "Flexible", duration: "0 days", apr: "8%", boost: "1.0x", min: 10000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_FLEXIBLE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
-  { name: "Loyal", duration: "30 days", apr: "14%", boost: "1.4x", min: 25000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_LOYAL_ID || DEFAULT_FLOW_STAKING_POOL_ID },
-  { name: "Whale", duration: "90 days", apr: "22%", boost: "2.2x", min: 100000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_WHALE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+  { name: "Flexible", duration: "0 days", boost: "1.0x", min: 10000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_FLEXIBLE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+  { name: "Loyal", duration: "30 days", boost: "1.4x", min: 25000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_LOYAL_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+  { name: "Whale", duration: "90 days", boost: "2.2x", min: 100000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_WHALE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
 ];
 
 const STAKING_RESEARCH = [
@@ -96,6 +98,19 @@ const parseFlowAmountInput = (value, label) => {
   return parsed;
 };
 
+const formatFlowAmount = (value, maximumFractionDigits = 2) =>
+  Number(value || 0).toLocaleString(undefined, {
+    maximumFractionDigits,
+  });
+
+const formatApr = (apr) => {
+  if (apr === null || apr === undefined) return "--";
+  if (!Number.isFinite(apr)) return "--";
+  if (apr >= 1000) return `${apr.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`;
+  if (apr >= 100) return `${apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+  return `${apr.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+};
+
 function GameContainer() {
   const account = useCurrentAccount();
   const walletState = useCurrentWallet();
@@ -132,12 +147,15 @@ function GameContainer() {
   const [stakingPosition, setStakingPosition] = useState(null);
   const [stakingLoading, setStakingLoading] = useState(false);
   const [stakingStatus, setStakingStatus] = useState("Connect wallet and configure pool IDs.");
+  const [stakingPoolStats, setStakingPoolStats] = useState({});
+  const [stakingPoolStatus, setStakingPoolStatus] = useState("Loading pool stats.");
   const [adminRewardRates, setAdminRewardRates] = useState(DEFAULT_STAKING_REWARD_RATES);
   const [adminRewardFunding, setAdminRewardFunding] = useState(DEFAULT_STAKING_REWARD_FUNDING);
   const [stakingAdminLoading, setStakingAdminLoading] = useState(false);
   const [stakingAdminStatus, setStakingAdminStatus] = useState("Connect admin wallet to manage rewards.");
   const activeStakingPlan = STAKING_PLANS.find((plan) => plan.name === selectedStakingPlan) ?? STAKING_PLANS[0];
   const isStakingAdminWallet = account?.address?.toLowerCase() === FLOW_STAKING_ADMIN_ADDRESS.toLowerCase();
+  const activePoolStats = stakingPoolStats[activeStakingPlan.name];
 
   const clearTimers = (timersRef) => {
     timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -508,6 +526,58 @@ function GameContainer() {
 
   const isStakingConfigured = Boolean(FLOW_STAKING_PACKAGE_ID && activeStakingPlan.poolId);
 
+  const getPlanAprLabel = (plan) => {
+    const stats = stakingPoolStats[plan.name];
+    if (!stats) return "Live APR";
+    if (!stats.totalStaked) return "Pool empty";
+    return formatApr(stats.estimatedApr);
+  };
+
+  const fetchStakingPoolStats = async () => {
+    if (!FLOW_STAKING_PACKAGE_ID) {
+      setStakingPoolStats({});
+      setStakingPoolStatus("Staking package is not configured.");
+      return;
+    }
+
+    try {
+      const entries = await Promise.all(
+        STAKING_PLANS.map(async (plan) => {
+          if (!plan.poolId) return [plan.name, null];
+
+          const response = await readClient.getObject({
+            id: plan.poolId,
+            options: { showContent: true },
+          });
+          const fields = response.data?.content?.fields || response.content || {};
+          const totalStakedBase = Number(fields.total_staked || 0);
+          const rewardPerSecondBase = Number(fields.reward_per_second || 0);
+          const rewardBalanceBase = Number(fields.reward_balance || 0);
+          const totalStaked = totalStakedBase / Number(FLOW_DECIMALS);
+          const rewardPerDay = (rewardPerSecondBase * SECONDS_PER_DAY) / Number(FLOW_DECIMALS);
+          const rewardBalance = rewardBalanceBase / Number(FLOW_DECIMALS);
+          const estimatedApr = totalStakedBase > 0
+            ? ((rewardPerSecondBase * SECONDS_PER_YEAR) / totalStakedBase) * 100
+            : null;
+
+          return [plan.name, {
+            paused: Boolean(fields.paused),
+            totalStaked,
+            rewardPerDay,
+            rewardBalance,
+            estimatedApr,
+          }];
+        }),
+      );
+
+      setStakingPoolStats(Object.fromEntries(entries.filter(([, stats]) => stats)));
+      setStakingPoolStatus("Live pool stats loaded from Sui testnet.");
+    } catch (error) {
+      console.error("[staking] Failed to load pool stats", error);
+      setStakingPoolStatus("Unable to load live APR from Sui testnet.");
+    }
+  };
+
   const fetchStakingPosition = async () => {
     if (!account?.address) {
       setStakingPosition(null);
@@ -573,6 +643,7 @@ function GameContainer() {
       await executeTransactionWithWallet(tx);
       toast.success(`Staked ${stakingAmount} $FLOW`);
       await fetchBalances({ silent: true });
+      await fetchStakingPoolStats();
       window.setTimeout(fetchStakingPosition, 1500);
     } catch (error) {
       console.error("[staking] Stake failed", error);
@@ -601,6 +672,7 @@ function GameContainer() {
       await executeTransactionWithWallet(tx);
       toast.success("Rewards claimed.");
       await fetchBalances({ silent: true });
+      await fetchStakingPoolStats();
       window.setTimeout(fetchStakingPosition, 1500);
     } catch (error) {
       console.error("[staking] Claim failed", error);
@@ -629,6 +701,7 @@ function GameContainer() {
       await executeTransactionWithWallet(tx);
       toast.success("Unstake completed.");
       await fetchBalances({ silent: true });
+      await fetchStakingPoolStats();
       window.setTimeout(fetchStakingPosition, 1500);
     } catch (error) {
       console.error("[staking] Unstake failed", error);
@@ -688,6 +761,7 @@ function GameContainer() {
       await executeTransactionWithWallet(tx);
       setStakingAdminStatus("Reward rates updated on Sui testnet.");
       toast.success("Staking reward rates updated.");
+      await fetchStakingPoolStats();
     } catch (error) {
       console.error("[staking-admin] Reward rate update failed", error);
       setStakingAdminStatus(error?.message || "Reward rate update failed.");
@@ -728,6 +802,7 @@ function GameContainer() {
       setStakingAdminStatus("Reward pools funded on Sui testnet.");
       toast.success("Staking reward pools funded.");
       await fetchBalances({ silent: true });
+      await fetchStakingPoolStats();
     } catch (error) {
       console.error("[staking-admin] Reward funding failed", error);
       setStakingAdminStatus(error?.message || "Reward funding failed.");
@@ -969,6 +1044,10 @@ function GameContainer() {
     fetchStakingPosition();
   }, [account?.address, selectedStakingPlan]);
 
+  useEffect(() => {
+    fetchStakingPoolStats();
+  }, []);
+
   useEffect(() => () => {
     clearTimers(balancePostTimersRef);
     clearTimers(balanceRefreshTimersRef);
@@ -1195,7 +1274,14 @@ function GameContainer() {
               <span>Wallet FLOW</span>
               <strong>{FLOWBalance ?? "--"}</strong>
             </div>
-            <button type="button" className="staking-link" onClick={() => fetchBalances()}>
+            <button
+              type="button"
+              className="staking-link"
+              onClick={() => {
+                fetchBalances();
+                fetchStakingPoolStats();
+              }}
+            >
               Refresh
             </button>
           </div>
@@ -1212,10 +1298,35 @@ function GameContainer() {
                 }}
               >
                 <span>{plan.name}</span>
-                <strong>{plan.apr}</strong>
+                <strong>{getPlanAprLabel(plan)}</strong>
                 <small>{plan.duration}</small>
               </button>
             ))}
+          </div>
+
+          <div className="staking-pool-metrics" aria-live="polite">
+            <div>
+              <span>Estimated APR</span>
+              <strong>
+                {activePoolStats?.totalStaked ? formatApr(activePoolStats.estimatedApr) : "Pool empty"}
+              </strong>
+            </div>
+            <div>
+              <span>Emission / day</span>
+              <strong>
+                {activePoolStats ? `${formatFlowAmount(activePoolStats.rewardPerDay, 2)} FLOW` : "--"}
+              </strong>
+            </div>
+            <div>
+              <span>Pool rewards</span>
+              <strong>
+                {activePoolStats ? `${formatFlowAmount(activePoolStats.rewardBalance, 2)} FLOW` : "--"}
+              </strong>
+            </div>
+            <div>
+              <span>APY</span>
+              <strong>Manual claim</strong>
+            </div>
           </div>
 
           <label className="staking-input-label" htmlFor="staking-amount">
@@ -1237,10 +1348,12 @@ function GameContainer() {
           <div className="staking-summary">
             <span>Lock</span>
             <strong>{activeStakingPlan.duration}</strong>
-            <span>Reward target</span>
-            <strong>{activeStakingPlan.apr} APR</strong>
+            <span>Live APR</span>
+            <strong>{activePoolStats?.totalStaked ? formatApr(activePoolStats.estimatedApr) : "--"}</strong>
             <span>Loyalty boost</span>
             <strong>{activeStakingPlan.boost}</strong>
+            <span>Total staked</span>
+            <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
             <span>Staked</span>
             <strong>{stakingPosition ? `${stakingPosition.amount} $FLOW` : "--"}</strong>
             <span>Unlock</span>
@@ -1251,6 +1364,7 @@ function GameContainer() {
             </strong>
           </div>
 
+          <p className="staking-pool-note">{stakingPoolStatus}</p>
           <p className={`staking-status ${isStakingConfigured ? "ready" : ""}`}>{stakingStatus}</p>
 
           <div className="staking-actions">
