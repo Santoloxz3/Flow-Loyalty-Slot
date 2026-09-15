@@ -108,6 +108,14 @@ const formatApr = (apr) => {
   return `${apr.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
 };
 
+const getProjectedApr = (stats, stakeAmount) => {
+  const amount = Number(stakeAmount || 0);
+  if (!stats || !amount || amount <= 0) return null;
+  const projectedTotalStaked = stats.totalStaked + amount;
+  if (projectedTotalStaked <= 0) return null;
+  return ((stats.rewardPerDay * 365) / projectedTotalStaked) * 100;
+};
+
 function GameContainer() {
   const account = useCurrentAccount();
   const walletState = useCurrentWallet();
@@ -153,6 +161,7 @@ function GameContainer() {
   const activeStakingPlan = STAKING_PLANS.find((plan) => plan.name === selectedStakingPlan) ?? STAKING_PLANS[0];
   const isStakingAdminWallet = account?.address?.toLowerCase() === FLOW_STAKING_ADMIN_ADDRESS.toLowerCase();
   const activePoolStats = stakingPoolStats[activeStakingPlan.name];
+  const projectedStakeApr = getProjectedApr(activePoolStats, stakingAmount);
 
   const clearTimers = (timersRef) => {
     timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -535,7 +544,10 @@ function GameContainer() {
   const getPlanAprLabel = (plan) => {
     const stats = stakingPoolStats[plan.name];
     if (!stats) return "Live APR";
-    if (!stats.totalStaked) return "Pool empty";
+    if (!stats.totalStaked) {
+      const firstStakeApr = getProjectedApr(stats, plan.min);
+      return firstStakeApr === null ? "Pool empty" : `~${formatApr(firstStakeApr)}`;
+    }
     return formatApr(stats.estimatedApr);
   };
 
@@ -1327,10 +1339,15 @@ function GameContainer() {
 
           <div className="staking-pool-metrics" aria-live="polite">
             <div>
-              <span>Estimated APR</span>
+              <span>{activePoolStats?.totalStaked ? "Estimated APR" : "First stake APR"}</span>
               <strong>
-                {activePoolStats?.totalStaked ? formatApr(activePoolStats.estimatedApr) : "Pool empty"}
+                {activePoolStats?.totalStaked
+                  ? formatApr(activePoolStats.estimatedApr)
+                  : formatApr(projectedStakeApr)}
               </strong>
+              {!activePoolStats?.totalStaked && activePoolStats && (
+                <small>Based on your amount</small>
+              )}
             </div>
             <div>
               <span>Emission / day</span>
@@ -1369,8 +1386,12 @@ function GameContainer() {
           <div className="staking-summary">
             <span>Lock</span>
             <strong>{activeStakingPlan.duration}</strong>
-            <span>Live APR</span>
-            <strong>{activePoolStats?.totalStaked ? formatApr(activePoolStats.estimatedApr) : "--"}</strong>
+            <span>{activePoolStats?.totalStaked ? "Live APR" : "APR after stake"}</span>
+            <strong>
+              {activePoolStats?.totalStaked
+                ? formatApr(activePoolStats.estimatedApr)
+                : formatApr(projectedStakeApr)}
+            </strong>
             <span>Loyalty boost</span>
             <strong>{activeStakingPlan.boost}</strong>
             <span>Total staked</span>

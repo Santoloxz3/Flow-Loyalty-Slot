@@ -199,6 +199,14 @@
   font-size: 1rem;
 }
 
+.staking-pool-metrics small {
+  display: block;
+  margin-top: 0.25rem;
+  color: #8fa8c0;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .staking-input-label {
   display: block;
   margin: 1.1rem 0 0.5rem;
