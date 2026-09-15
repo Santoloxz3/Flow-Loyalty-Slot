@@ -10,7 +10,6 @@ import {
 } from "@mysten/dapp-kit";
 import "@mysten/dapp-kit/dist/index.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
-import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { ToastContainer, toast } from "react-toastify";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,7 +20,6 @@ const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
 const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
-const TESTNET_RPC_URL = "https://fullnode.testnet.sui.io:443";
 const FLOW_DECIMALS = 1_000_000_000n;
 const SUI_CLOCK_OBJECT_ID = "0x6";
 const FLOW_STAKING_PACKAGE_ID = import.meta.env.VITE_FLOW_STAKING_PACKAGE_ID || "";
@@ -46,7 +44,6 @@ const U64_MAX_VALUE = 18_446_744_073_709_551_615n;
 const SECONDS_PER_DAY = 86_400;
 const SECONDS_PER_YEAR = 31_536_000;
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
-const readClient = new SuiJsonRpcClient({ network: "testnet", url: TESTNET_RPC_URL });
 const queryClient = new QueryClient();
 const networkConfig = {
   testnet: { url: "https://fullnode.testnet.sui.io:443" },
@@ -289,6 +286,15 @@ function GameContainer() {
         fetchBalances({ silent: true });
       }, delay);
       balanceRefreshTimersRef.current.push(timerId);
+    });
+  };
+
+  const scheduleStakingRefresh = () => {
+    [1500, 5000, 12000].forEach((delay) => {
+      window.setTimeout(() => {
+        fetchStakingPoolStats();
+        fetchStakingPosition();
+      }, delay);
     });
   };
 
@@ -545,11 +551,11 @@ function GameContainer() {
         STAKING_PLANS.map(async (plan) => {
           if (!plan.poolId) return [plan.name, null];
 
-          const response = await readClient.getObject({
-            id: plan.poolId,
-            options: { showContent: true },
+          const response = await client.getObject({
+            objectId: plan.poolId,
+            include: { json: true },
           });
-          const fields = response.data?.content?.fields || response.content || {};
+          const fields = response.object?.json || {};
           const totalStakedBase = Number(fields.total_staked || 0);
           const rewardPerSecondBase = Number(fields.reward_per_second || 0);
           const rewardBalanceBase = Number(fields.reward_balance || 0);
@@ -591,17 +597,18 @@ function GameContainer() {
     }
 
     try {
-      const response = await readClient.getOwnedObjects({
+      const response = await client.listOwnedObjects({
         owner: account.address,
-        filter: { StructType: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::StakePosition` },
-        options: { showContent: true },
+        type: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::StakePosition`,
+        include: { json: true },
+        limit: 50,
       });
-      const positions = response.data
+      const positions = response.objects
         .map((item) => {
-          const fields = item.data?.content?.fields;
+          const fields = item.json;
           if (!fields) return null;
           return {
-            id: item.data.objectId,
+            id: item.objectId,
             poolId: fields.pool_id,
             amount: Number(fields.amount || 0) / Number(FLOW_DECIMALS),
             unlockTime: Number(fields.unlock_time || 0),
@@ -644,7 +651,9 @@ function GameContainer() {
       toast.success(`Staked ${stakingAmount} $FLOW`);
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
-      window.setTimeout(fetchStakingPosition, 1500);
+      await fetchStakingPosition();
+      scheduleBalanceRefresh();
+      scheduleStakingRefresh();
     } catch (error) {
       console.error("[staking] Stake failed", error);
       toast.error(error?.message || "Stake failed.");
@@ -673,7 +682,9 @@ function GameContainer() {
       toast.success("Rewards claimed.");
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
-      window.setTimeout(fetchStakingPosition, 1500);
+      await fetchStakingPosition();
+      scheduleBalanceRefresh();
+      scheduleStakingRefresh();
     } catch (error) {
       console.error("[staking] Claim failed", error);
       toast.error(error?.message || "Claim failed.");
@@ -702,7 +713,9 @@ function GameContainer() {
       toast.success("Unstake completed.");
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
-      window.setTimeout(fetchStakingPosition, 1500);
+      await fetchStakingPosition();
+      scheduleBalanceRefresh();
+      scheduleStakingRefresh();
     } catch (error) {
       console.error("[staking] Unstake failed", error);
       toast.error(error?.message || "Unstake failed. Check lock time or rewards balance.");
@@ -762,6 +775,7 @@ function GameContainer() {
       setStakingAdminStatus("Reward rates updated on Sui testnet.");
       toast.success("Staking reward rates updated.");
       await fetchStakingPoolStats();
+      scheduleStakingRefresh();
     } catch (error) {
       console.error("[staking-admin] Reward rate update failed", error);
       setStakingAdminStatus(error?.message || "Reward rate update failed.");
@@ -803,6 +817,8 @@ function GameContainer() {
       toast.success("Staking reward pools funded.");
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
+      scheduleBalanceRefresh();
+      scheduleStakingRefresh();
     } catch (error) {
       console.error("[staking-admin] Reward funding failed", error);
       setStakingAdminStatus(error?.message || "Reward funding failed.");
@@ -1024,11 +1040,15 @@ function GameContainer() {
     const handleVisibilityRefresh = () => {
       if (document.visibilityState === "visible") {
         fetchBalances({ silent: true });
+        fetchStakingPoolStats();
+        fetchStakingPosition();
       }
     };
 
     const handleFocusRefresh = () => {
       fetchBalances({ silent: true });
+      fetchStakingPoolStats();
+      fetchStakingPosition();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityRefresh);
@@ -1280,6 +1300,7 @@ function GameContainer() {
               onClick={() => {
                 fetchBalances();
                 fetchStakingPoolStats();
+                fetchStakingPosition();
               }}
             >
               Refresh
