@@ -21,6 +21,8 @@ try {
   console.error("❌ Errore caricamento chiave privata:", e);
 }
 
+const getPayoutWalletAddress = () => keypair.getPublicKey().toSuiAddress();
+
 async function isSignatureValid(signature, message, expectedWalletAddress) {
   try {
     const messageBytes = new TextEncoder().encode(message);
@@ -106,22 +108,25 @@ export async function withdraw(req, res) {
     const balance = BigInt(balanceData.balance);
     const amount = balance * 1_000_000_000n;
 
+    const payoutWallet = getPayoutWalletAddress();
     const coins = await client.listCoins({
-      owner: keypair.getPublicKey().toSuiAddress(),
+      owner: payoutWallet,
       coinType: process.env.FLOW_COIN_TYPE,
     });
 
-	// ✅ Controllo saldo minimo richiesto nel wallet backend
-	const totalAvailable = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
-	const MIN_REQUIRED = 50_000_000_000n; // 50000 $FLOW
-	if (totalAvailable < MIN_REQUIRED) {
-	  return res.status(500).json({ message: "Il wallet dei premi non ha fondi sufficienti per effettuare prelievi." });
+	if (!coins.objects.length) {
+	  return res.status(500).json({ message: "FLOW non disponibili nel backend" });
 	}
 
-
-    if (!coins.objects.length) {
-      return res.status(500).json({ message: "FLOW non disponibili nel backend" });
-    }
+	// ✅ Controllo saldo richiesto nel wallet backend
+	const totalAvailable = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
+	if (totalAvailable < amount) {
+	  const availableFlow = Number(totalAvailable) / 1_000_000_000;
+	  const requestedFlow = Number(amount) / 1_000_000_000;
+	  return res.status(500).json({
+	    message: `Il wallet dei premi ha ${availableFlow} FLOW ma deve inviare ${requestedFlow} FLOW.`,
+	  });
+	}
 
 	let txId = null;
 
@@ -138,11 +143,18 @@ export async function withdraw(req, res) {
 	  txId = inserted?.[0]?.id;
 
 	  const tx = new Transaction();
-	  const [coin] = tx.splitCoins(
-		tx.object(coins.objects[0].objectId),
-		[amount]
-	  );
-	  tx.transferObjects([coin], wallet);
+	  const primaryCoin = tx.object(coins.objects[0].objectId);
+	  const extraCoins = coins.objects.slice(1).map((coin) => tx.object(coin.objectId));
+	  if (extraCoins.length > 0) {
+		tx.mergeCoins(primaryCoin, extraCoins);
+	  }
+
+	  if (totalAvailable === amount) {
+		tx.transferObjects([primaryCoin], wallet);
+	  } else {
+		const [coin] = tx.splitCoins(primaryCoin, [amount]);
+		tx.transferObjects([coin], wallet);
+	  }
 
 	  const result = await client.signAndExecuteTransaction({
 		signer: keypair,
@@ -183,13 +195,19 @@ export async function withdraw(req, res) {
 }
 export async function checkBackendBalance(req, res) {
   try {
+    const payoutWallet = getPayoutWalletAddress();
     const coins = await client.listCoins({
-      owner: keypair.getPublicKey().toSuiAddress(),
+      owner: payoutWallet,
       coinType: process.env.FLOW_COIN_TYPE,
     });
 
     const total = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
-    return res.json({ balance: total.toString() }); // in nanos
+    return res.json({
+      wallet: payoutWallet,
+      coinType: process.env.FLOW_COIN_TYPE,
+      balance: total.toString(),
+      balanceFlow: Number(total) / 1_000_000_000,
+    });
   } catch (err) {
     console.error("❌ Errore controllo balance backend:", err);
     return res.status(500).json({ message: "Errore durante controllo saldo backend" });
