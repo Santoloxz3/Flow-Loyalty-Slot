@@ -109,17 +109,13 @@ export async function withdraw(req, res) {
     const amount = balance * 1_000_000_000n;
 
     const payoutWallet = getPayoutWalletAddress();
-    const coins = await client.listCoins({
+    const payoutBalance = await client.getBalance({
       owner: payoutWallet,
       coinType: process.env.FLOW_COIN_TYPE,
     });
 
-	if (!coins.objects.length) {
-	  return res.status(500).json({ message: "FLOW non disponibili nel backend" });
-	}
-
 	// ✅ Controllo saldo richiesto nel wallet backend
-	const totalAvailable = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
+	const totalAvailable = BigInt(payoutBalance.balance?.balance || 0);
 	if (totalAvailable < amount) {
 	  const availableFlow = Number(totalAvailable) / 1_000_000_000;
 	  const requestedFlow = Number(amount) / 1_000_000_000;
@@ -143,18 +139,11 @@ export async function withdraw(req, res) {
 	  txId = inserted?.[0]?.id;
 
 	  const tx = new Transaction();
-	  const primaryCoin = tx.object(coins.objects[0].objectId);
-	  const extraCoins = coins.objects.slice(1).map((coin) => tx.object(coin.objectId));
-	  if (extraCoins.length > 0) {
-		tx.mergeCoins(primaryCoin, extraCoins);
-	  }
-
-	  if (totalAvailable === amount) {
-		tx.transferObjects([primaryCoin], wallet);
-	  } else {
-		const [coin] = tx.splitCoins(primaryCoin, [amount]);
-		tx.transferObjects([coin], wallet);
-	  }
+	  const coin = tx.coin({
+		balance: amount,
+		type: process.env.FLOW_COIN_TYPE,
+	  });
+	  tx.transferObjects([coin], wallet);
 
 	  const result = await client.signAndExecuteTransaction({
 		signer: keypair,
@@ -196,12 +185,12 @@ export async function withdraw(req, res) {
 export async function checkBackendBalance(req, res) {
   try {
     const payoutWallet = getPayoutWalletAddress();
-    const coins = await client.listCoins({
+    const payoutBalance = await client.getBalance({
       owner: payoutWallet,
       coinType: process.env.FLOW_COIN_TYPE,
     });
 
-    const total = coins.objects.reduce((sum, c) => sum + BigInt(c.balance), 0n);
+    const total = BigInt(payoutBalance.balance?.balance || 0);
     return res.json({
       wallet: payoutWallet,
       coinType: process.env.FLOW_COIN_TYPE,
