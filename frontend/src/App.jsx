@@ -10,6 +10,7 @@ import {
 } from "@mysten/dapp-kit";
 import "@mysten/dapp-kit/dist/index.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
+import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import { ToastContainer, toast } from "react-toastify";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -20,12 +21,80 @@ const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
 const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
+const TESTNET_RPC_URL = "https://fullnode.testnet.sui.io:443";
+const FLOW_DECIMALS = 1_000_000_000n;
+const SUI_CLOCK_OBJECT_ID = "0x6";
+const FLOW_STAKING_PACKAGE_ID = import.meta.env.VITE_FLOW_STAKING_PACKAGE_ID || "";
+const DEFAULT_FLOW_STAKING_POOL_ID = import.meta.env.VITE_FLOW_STAKING_POOL_ID || "";
+const FLOW_STAKING_ADMIN_ADDRESS = "0xe8ec5bf9587b55547f0f58bcb3c7341e90dff8d1a10abbfe2b4728e52a7813e8";
+const FLOW_STAKING_ADMIN_CAP_IDS = {
+  Flexible: "0x5540cf578ef5f5c81017c7d7d4b6bde5aa82266085c69a35cc81d75f4cc14ee8",
+  Loyal: "0x9b0ea9266bc882982dbdb148b87a9c2537f897ba8697d7f715da0b4a2d15619a",
+  Whale: "0x6f153e6d615c519d1b3fcce02ee3f8098ba8587459ae651764eaea915fd77f55",
+};
+const DEFAULT_STAKING_REWARD_RATES = {
+  Flexible: 1_000_000,
+  Loyal: 2_000_000,
+  Whale: 3_000_000,
+};
+const DEFAULT_STAKING_REWARD_FUNDING = {
+  Flexible: 10_000,
+  Loyal: 20_000,
+  Whale: 30_000,
+};
+const U64_MAX_VALUE = 18_446_744_073_709_551_615n;
 const client = new SuiGrpcClient({ network: "testnet", baseUrl: TESTNET_GRPC_URL });
+const readClient = new SuiJsonRpcClient({ network: "testnet", url: TESTNET_RPC_URL });
 const queryClient = new QueryClient();
 const networkConfig = {
   testnet: { url: "https://fullnode.testnet.sui.io:443" },
 };
 const createStubSuiClient = () => ({});
+
+const STAKING_PLANS = [
+  { name: "Flexible", duration: "0 days", apr: "8%", boost: "1.0x", min: 10000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_FLEXIBLE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+  { name: "Loyal", duration: "30 days", apr: "14%", boost: "1.4x", min: 25000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_LOYAL_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+  { name: "Whale", duration: "90 days", apr: "22%", boost: "2.2x", min: 100000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_WHALE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+];
+
+const STAKING_RESEARCH = [
+  "Local Move draft added: generic $FLOW pool, position object, lock duration and reward funding.",
+  "Reference code had gaps around admin-cap and position-pool checks; the draft guards both.",
+  "Keep this in preview until Move tests, testnet rehearsal and independent audit are complete.",
+];
+
+const parseU64Input = (value, label, { allowZero = false } = {}) => {
+  const normalized = String(value).trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`${label} must be a whole number.`);
+  }
+
+  const parsed = BigInt(normalized);
+  if (!allowZero && parsed === 0n) {
+    throw new Error(`${label} must be greater than zero.`);
+  }
+  if (parsed > U64_MAX_VALUE) {
+    throw new Error(`${label} is too large.`);
+  }
+
+  return parsed;
+};
+
+const parseFlowAmountInput = (value, label) => {
+  const normalized = String(value).trim();
+  if (!/^\d+(\.\d{1,9})?$/.test(normalized)) {
+    throw new Error(`${label} must be a FLOW amount with up to 9 decimals.`);
+  }
+
+  const [whole, fraction = ""] = normalized.split(".");
+  const paddedFraction = `${fraction}000000000`.slice(0, 9);
+  const parsed = BigInt(whole) * FLOW_DECIMALS + BigInt(paddedFraction);
+  if (parsed === 0n) {
+    throw new Error(`${label} must be greater than zero.`);
+  }
+
+  return parsed;
+};
 
 function GameContainer() {
   const account = useCurrentAccount();
@@ -58,6 +127,17 @@ function GameContainer() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("flow-slot-muted") === "1";
   });
+  const [selectedStakingPlan, setSelectedStakingPlan] = useState(STAKING_PLANS[0].name);
+  const [stakingAmount, setStakingAmount] = useState(10000);
+  const [stakingPosition, setStakingPosition] = useState(null);
+  const [stakingLoading, setStakingLoading] = useState(false);
+  const [stakingStatus, setStakingStatus] = useState("Connect wallet and configure pool IDs.");
+  const [adminRewardRates, setAdminRewardRates] = useState(DEFAULT_STAKING_REWARD_RATES);
+  const [adminRewardFunding, setAdminRewardFunding] = useState(DEFAULT_STAKING_REWARD_FUNDING);
+  const [stakingAdminLoading, setStakingAdminLoading] = useState(false);
+  const [stakingAdminStatus, setStakingAdminStatus] = useState("Connect admin wallet to manage rewards.");
+  const activeStakingPlan = STAKING_PLANS.find((plan) => plan.name === selectedStakingPlan) ?? STAKING_PLANS[0];
+  const isStakingAdminWallet = account?.address?.toLowerCase() === FLOW_STAKING_ADMIN_ADDRESS.toLowerCase();
 
   const clearTimers = (timersRef) => {
     timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -426,6 +506,237 @@ function GameContainer() {
     }
   };
 
+  const isStakingConfigured = Boolean(FLOW_STAKING_PACKAGE_ID && activeStakingPlan.poolId);
+
+  const fetchStakingPosition = async () => {
+    if (!account?.address) {
+      setStakingPosition(null);
+      setStakingStatus("Connect wallet to load staking position.");
+      return;
+    }
+    if (!isStakingConfigured) {
+      setStakingPosition(null);
+      setStakingStatus("Set staking package and pool IDs to enable live staking.");
+      return;
+    }
+
+    try {
+      const response = await readClient.getOwnedObjects({
+        owner: account.address,
+        filter: { StructType: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::StakePosition` },
+        options: { showContent: true },
+      });
+      const positions = response.data
+        .map((item) => {
+          const fields = item.data?.content?.fields;
+          if (!fields) return null;
+          return {
+            id: item.data.objectId,
+            poolId: fields.pool_id,
+            amount: Number(fields.amount || 0) / Number(FLOW_DECIMALS),
+            unlockTime: Number(fields.unlock_time || 0),
+          };
+        })
+        .filter(Boolean);
+      const activePosition = positions.find((position) => position.poolId === activeStakingPlan.poolId) || null;
+
+      setStakingPosition(activePosition);
+      setStakingStatus(activePosition ? "Active staking position loaded." : "No active position for this plan.");
+    } catch (error) {
+      console.error("[staking] Failed to load position", error);
+      setStakingStatus("Unable to load staking position from Sui testnet.");
+    }
+  };
+
+  const handleStake = async () => {
+    if (!connected || !account?.address) return toast.error("Connect to the wallet.");
+    if (!isStakingConfigured) return toast.error("Staking contract IDs are not configured yet.");
+
+    const amountBigInt = BigInt(stakingAmount) * FLOW_DECIMALS;
+    setStakingLoading(true);
+    try {
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.setGasBudget(50_000_000n);
+      const stakeCoin = tx.coin({
+        balance: amountBigInt,
+        type: FLOW_COIN_TYPE,
+      });
+
+      const position = tx.moveCall({
+        target: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::stake`,
+        typeArguments: [FLOW_COIN_TYPE],
+        arguments: [tx.object(activeStakingPlan.poolId), stakeCoin, tx.object(SUI_CLOCK_OBJECT_ID)],
+      });
+      tx.transferObjects([position], account.address);
+
+      await executeTransactionWithWallet(tx);
+      toast.success(`Staked ${stakingAmount} $FLOW`);
+      await fetchBalances({ silent: true });
+      window.setTimeout(fetchStakingPosition, 1500);
+    } catch (error) {
+      console.error("[staking] Stake failed", error);
+      toast.error(error?.message || "Stake failed.");
+    } finally {
+      setStakingLoading(false);
+    }
+  };
+
+  const handleClaimRewards = async () => {
+    if (!connected || !account?.address) return toast.error("Connect to the wallet.");
+    if (!stakingPosition?.id) return toast.error("No staking position to claim.");
+
+    setStakingLoading(true);
+    try {
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.setGasBudget(50_000_000n);
+      const reward = tx.moveCall({
+        target: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::claim_rewards`,
+        typeArguments: [FLOW_COIN_TYPE],
+        arguments: [tx.object(activeStakingPlan.poolId), tx.object(stakingPosition.id), tx.object(SUI_CLOCK_OBJECT_ID)],
+      });
+      tx.transferObjects([reward], account.address);
+
+      await executeTransactionWithWallet(tx);
+      toast.success("Rewards claimed.");
+      await fetchBalances({ silent: true });
+      window.setTimeout(fetchStakingPosition, 1500);
+    } catch (error) {
+      console.error("[staking] Claim failed", error);
+      toast.error(error?.message || "Claim failed.");
+    } finally {
+      setStakingLoading(false);
+    }
+  };
+
+  const handleUnstake = async () => {
+    if (!connected || !account?.address) return toast.error("Connect to the wallet.");
+    if (!stakingPosition?.id) return toast.error("No staking position to unstake.");
+
+    setStakingLoading(true);
+    try {
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.setGasBudget(50_000_000n);
+      const [principal, reward] = tx.moveCall({
+        target: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::unstake`,
+        typeArguments: [FLOW_COIN_TYPE],
+        arguments: [tx.object(activeStakingPlan.poolId), tx.object(stakingPosition.id), tx.object(SUI_CLOCK_OBJECT_ID)],
+      });
+      tx.transferObjects([principal, reward], account.address);
+
+      await executeTransactionWithWallet(tx);
+      toast.success("Unstake completed.");
+      await fetchBalances({ silent: true });
+      window.setTimeout(fetchStakingPosition, 1500);
+    } catch (error) {
+      console.error("[staking] Unstake failed", error);
+      toast.error(error?.message || "Unstake failed. Check lock time or rewards balance.");
+    } finally {
+      setStakingLoading(false);
+    }
+  };
+
+  const requireStakingAdmin = () => {
+    if (!connected || !account?.address) {
+      throw new Error("Connect the admin wallet.");
+    }
+    if (!isStakingAdminWallet) {
+      throw new Error("Connected wallet is not the staking admin wallet.");
+    }
+    if (!FLOW_STAKING_PACKAGE_ID) {
+      throw new Error("Staking package ID is not configured.");
+    }
+  };
+
+  const handleAdminRewardRateChange = (planName, value) => {
+    setAdminRewardRates((current) => ({ ...current, [planName]: value }));
+  };
+
+  const handleAdminRewardFundingChange = (planName, value) => {
+    setAdminRewardFunding((current) => ({ ...current, [planName]: value }));
+  };
+
+  const handleSetStakingRewardRates = async () => {
+    setStakingAdminLoading(true);
+    try {
+      requireStakingAdmin();
+
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.setGasBudget(50_000_000n);
+
+      STAKING_PLANS.forEach((plan) => {
+        const adminCapId = FLOW_STAKING_ADMIN_CAP_IDS[plan.name];
+        if (!adminCapId || !plan.poolId) {
+          throw new Error(`${plan.name} admin cap or pool is missing.`);
+        }
+
+        tx.moveCall({
+          target: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::set_reward_rate`,
+          typeArguments: [FLOW_COIN_TYPE],
+          arguments: [
+            tx.object(adminCapId),
+            tx.object(plan.poolId),
+            tx.pure.u64(parseU64Input(adminRewardRates[plan.name], `${plan.name} reward rate`, { allowZero: true })),
+            tx.object(SUI_CLOCK_OBJECT_ID),
+          ],
+        });
+      });
+
+      await executeTransactionWithWallet(tx);
+      setStakingAdminStatus("Reward rates updated on Sui testnet.");
+      toast.success("Staking reward rates updated.");
+    } catch (error) {
+      console.error("[staking-admin] Reward rate update failed", error);
+      setStakingAdminStatus(error?.message || "Reward rate update failed.");
+      toast.error(error?.message || "Reward rate update failed.");
+    } finally {
+      setStakingAdminLoading(false);
+    }
+  };
+
+  const handleFundStakingRewards = async () => {
+    setStakingAdminLoading(true);
+    try {
+      requireStakingAdmin();
+
+      const tx = new Transaction();
+      tx.setSender(account.address);
+      tx.setGasBudget(50_000_000n);
+
+      STAKING_PLANS.forEach((plan) => {
+        const adminCapId = FLOW_STAKING_ADMIN_CAP_IDS[plan.name];
+        if (!adminCapId || !plan.poolId) {
+          throw new Error(`${plan.name} admin cap or pool is missing.`);
+        }
+
+        const rewardCoin = tx.coin({
+          balance: parseFlowAmountInput(adminRewardFunding[plan.name], `${plan.name} reward funding`),
+          type: FLOW_COIN_TYPE,
+        });
+
+        tx.moveCall({
+          target: `${FLOW_STAKING_PACKAGE_ID}::flow_staking::fund_rewards`,
+          typeArguments: [FLOW_COIN_TYPE],
+          arguments: [tx.object(adminCapId), tx.object(plan.poolId), rewardCoin],
+        });
+      });
+
+      await executeTransactionWithWallet(tx);
+      setStakingAdminStatus("Reward pools funded on Sui testnet.");
+      toast.success("Staking reward pools funded.");
+      await fetchBalances({ silent: true });
+    } catch (error) {
+      console.error("[staking-admin] Reward funding failed", error);
+      setStakingAdminStatus(error?.message || "Reward funding failed.");
+      toast.error(error?.message || "Reward funding failed.");
+    } finally {
+      setStakingAdminLoading(false);
+    }
+  };
+
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const simboliVincita = [
@@ -654,6 +965,10 @@ function GameContainer() {
     };
   }, [connected, account?.address]);
 
+  useEffect(() => {
+    fetchStakingPosition();
+  }, [account?.address, selectedStakingPlan]);
+
   useEffect(() => () => {
     clearTimers(balancePostTimersRef);
     clearTimers(balanceRefreshTimersRef);
@@ -662,7 +977,8 @@ function GameContainer() {
   const canShowWalletPanel = Boolean(isWalletReady && connected && account?.address);
 
   return (
-    <div className="app-container">
+    <main className="flow-page">
+    <section className="app-container" aria-label="Flow slot game">
       <div className="left-panel">
         {connected ? (
           <button className="btn" onClick={handleDisconnect}>
@@ -855,7 +1171,150 @@ function GameContainer() {
           </div>
         </div>
       )}
-    </div>
+    </section>
+
+    <section className="staking-section" id="staking" aria-labelledby="staking-title">
+      <div className="staking-shell">
+        <div className="staking-copy">
+          <p className="staking-kicker">Sui testnet staking</p>
+          <h2 id="staking-title">$FLOW Staking Vault</h2>
+          <p>
+            A staking layer for players who want to lock $FLOW, earn scheduled rewards and unlock
+            extra loyalty multipliers without mixing slot balance and staked funds.
+          </p>
+          <div className="staking-research">
+            {STAKING_RESEARCH.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="staking-panel" aria-label="Staking panel">
+          <div className="staking-panel-head">
+            <div>
+              <span>Wallet FLOW</span>
+              <strong>{FLOWBalance ?? "--"}</strong>
+            </div>
+            <button type="button" className="staking-link" onClick={() => fetchBalances()}>
+              Refresh
+            </button>
+          </div>
+
+          <div className="staking-plan-grid" role="tablist" aria-label="Staking plans">
+            {STAKING_PLANS.map((plan) => (
+              <button
+                key={plan.name}
+                type="button"
+                className={`staking-plan ${selectedStakingPlan === plan.name ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedStakingPlan(plan.name);
+                  setStakingAmount(Math.max(stakingAmount, plan.min));
+                }}
+              >
+                <span>{plan.name}</span>
+                <strong>{plan.apr}</strong>
+                <small>{plan.duration}</small>
+              </button>
+            ))}
+          </div>
+
+          <label className="staking-input-label" htmlFor="staking-amount">
+            Amount to stake
+          </label>
+          <div className="staking-amount-row">
+            <button type="button" onClick={() => setStakingAmount((value) => Math.max(activeStakingPlan.min, value - 10000))}>-</button>
+            <input
+              id="staking-amount"
+              type="number"
+              min={activeStakingPlan.min}
+              step="10000"
+              value={stakingAmount}
+              onChange={(event) => setStakingAmount(Math.max(activeStakingPlan.min, Number(event.target.value) || activeStakingPlan.min))}
+            />
+            <button type="button" onClick={() => setStakingAmount((value) => value + 10000)}>+</button>
+          </div>
+
+          <div className="staking-summary">
+            <span>Lock</span>
+            <strong>{activeStakingPlan.duration}</strong>
+            <span>Reward target</span>
+            <strong>{activeStakingPlan.apr} APR</strong>
+            <span>Loyalty boost</span>
+            <strong>{activeStakingPlan.boost}</strong>
+            <span>Staked</span>
+            <strong>{stakingPosition ? `${stakingPosition.amount} $FLOW` : "--"}</strong>
+            <span>Unlock</span>
+            <strong>
+              {stakingPosition?.unlockTime
+                ? new Date(stakingPosition.unlockTime * 1000).toLocaleDateString()
+                : "--"}
+            </strong>
+          </div>
+
+          <p className={`staking-status ${isStakingConfigured ? "ready" : ""}`}>{stakingStatus}</p>
+
+          <div className="staking-actions">
+            <button type="button" onClick={handleStake} disabled={stakingLoading || !isStakingConfigured}>
+              Stake
+            </button>
+            <button type="button" onClick={handleClaimRewards} disabled={stakingLoading || !stakingPosition}>
+              Claim
+            </button>
+            <button type="button" onClick={handleUnstake} disabled={stakingLoading || !stakingPosition}>
+              Unstake
+            </button>
+          </div>
+
+          {isStakingAdminWallet && (
+            <div className="staking-admin-panel" aria-label="Staking admin controls">
+              <div className="staking-admin-head">
+                <span>Admin wallet</span>
+                <strong>Rewards control</strong>
+              </div>
+
+              <div className="staking-admin-grid">
+                {STAKING_PLANS.map((plan) => (
+                  <div className="staking-admin-row" key={`admin-${plan.name}`}>
+                    <span>{plan.name}</span>
+                    <label>
+                      Rate / sec
+                      <input
+                        type="number"
+                        min="0"
+                        step="100000"
+                        value={adminRewardRates[plan.name]}
+                        onChange={(event) => handleAdminRewardRateChange(plan.name, event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Fund FLOW
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={adminRewardFunding[plan.name]}
+                        onChange={(event) => handleAdminRewardFundingChange(plan.name, event.target.value)}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <p className="staking-admin-status">{stakingAdminStatus}</p>
+              <div className="staking-admin-actions">
+                <button type="button" onClick={handleSetStakingRewardRates} disabled={stakingAdminLoading}>
+                  Set Rates
+                </button>
+                <button type="button" onClick={handleFundStakingRewards} disabled={stakingAdminLoading}>
+                  Fund Pools
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+    </main>
   );
 }
 
