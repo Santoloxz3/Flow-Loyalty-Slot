@@ -65,6 +65,60 @@ const STAKING_RESEARCH = [
   "Keep this in preview until Move tests, testnet rehearsal and independent audit are complete.",
 ];
 
+const PremiumShortcutIcon = ({ type }) => {
+  if (type === "stake") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M7 10V8a5 5 0 0 1 10 0v2" />
+        <rect x="5" y="10" width="14" height="10" rx="3" />
+        <path d="M12 14v3" />
+        <path d="M9 4.7 12 3l3 1.7" />
+      </svg>
+    );
+  }
+
+  if (type === "slot") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="5" y="4" width="14" height="16" rx="3" />
+        <path d="M8 8h8M8 12h8M8 16h5" />
+        <path d="M18 9h2v5" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 3 4 8l8 13 8-13-8-5Z" />
+      <path d="M4 8h16M8.5 8 12 21 15.5 8M8.5 8 12 3l3.5 5" />
+    </svg>
+  );
+};
+
+const PremiumShortcutLink = ({ href, label, type, external = false }) => (
+  <a
+    href={href}
+    className={`premium-shortcut premium-shortcut-${type}`}
+    title={label}
+    aria-label={label}
+    {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+  >
+    <PremiumShortcutIcon type={type} />
+    <span className="sr-only">{label}</span>
+  </a>
+);
+
+const WalletActionShortcuts = ({ currentPage }) => (
+  <div className="wallet-action-shortcuts" aria-label="Quick links">
+    <PremiumShortcutLink href={FLOW_ON_SUI_URL} label="Open FlowOnSui" type="flow" external />
+    {currentPage === "stake" ? (
+      <PremiumShortcutLink href="/" label="Open Flow Loyalty Slot" type="slot" />
+    ) : (
+      <PremiumShortcutLink href={STAKE_PATH} label="Open staking page" type="stake" />
+    )}
+  </div>
+);
+
 const parseU64Input = (value, label, { allowZero = false } = {}) => {
   const normalized = String(value).trim();
   if (!/^\d+$/.test(normalized)) {
@@ -1123,6 +1177,7 @@ function GameContainer() {
     <main className={`flow-page ${isStakePage ? "flow-page-stake" : ""}`}>
     <section className="app-container" aria-label="Flow slot game">
       <div className="left-panel">
+        <WalletActionShortcuts currentPage="slot" />
         {connected ? (
           <button className="btn" onClick={handleDisconnect}>
             Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
@@ -1158,14 +1213,6 @@ function GameContainer() {
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
               <p className="wallet-balance-line"><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
               <p className="slot-balance-line"><span className="wallet-line-icon" aria-hidden="true">🎰</span><strong> FLOW Slot:</strong> {slotBalance}</p>
-              <div className="wallet-quick-links" aria-label="Quick links">
-                <a href={FLOW_ON_SUI_URL} className="wallet-quick-link" title="FlowOnSui" aria-label="Open FlowOnSui">
-                  F
-                </a>
-                <a href={STAKE_PATH} className="wallet-quick-link" title="Stake" aria-label="Open staking page">
-                  S
-                </a>
-              </div>
               {balanceError ? <p className="wallet-warning">{balanceError}</p> : null}
               {freeSpinsLeft > 0 && (
 				<button
@@ -1326,13 +1373,8 @@ function GameContainer() {
 
     <section className="staking-section staking-page" id="staking" aria-labelledby="staking-title">
       <div className="staking-topbar" aria-label="Staking navigation">
-        <a className="staking-home-link" href="/">
-          Slot
-        </a>
         <div className="staking-topbar-actions">
-          <a href={FLOW_ON_SUI_URL} className="wallet-quick-link" title="FlowOnSui" aria-label="Open FlowOnSui">
-            F
-          </a>
+          <WalletActionShortcuts currentPage="stake" />
           {connected ? (
             <button className="staking-connect-button" onClick={handleDisconnect}>
               Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
