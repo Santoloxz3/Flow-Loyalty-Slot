@@ -65,34 +65,10 @@ const STAKING_RESEARCH = [
   "Keep this in preview until Move tests, testnet rehearsal and independent audit are complete.",
 ];
 
-const PremiumShortcutIcon = ({ type }) => {
-  if (type === "stake") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M7 10V8a5 5 0 0 1 10 0v2" />
-        <rect x="5" y="10" width="14" height="10" rx="3" />
-        <path d="M12 14v3" />
-        <path d="M9 4.7 12 3l3 1.7" />
-      </svg>
-    );
-  }
-
-  if (type === "slot") {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <rect x="5" y="4" width="14" height="16" rx="3" />
-        <path d="M8 8h8M8 12h8M8 16h5" />
-        <path d="M18 9h2v5" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M12 3 4 8l8 13 8-13-8-5Z" />
-      <path d="M4 8h16M8.5 8 12 21 15.5 8M8.5 8 12 3l3.5 5" />
-    </svg>
-  );
+const SHORTCUT_ICONS = {
+  flow: "/shortcuts/flowonsui.jpg",
+  stake: "/shortcuts/stake.jpg",
+  slot: "/shortcuts/slot.jpg",
 };
 
 const PremiumShortcutLink = ({ href, label, type, external = false }) => (
@@ -103,7 +79,7 @@ const PremiumShortcutLink = ({ href, label, type, external = false }) => (
     aria-label={label}
     {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
   >
-    <PremiumShortcutIcon type={type} />
+    <img src={SHORTCUT_ICONS[type]} alt="" aria-hidden="true" />
     <span className="sr-only">{label}</span>
   </a>
 );
