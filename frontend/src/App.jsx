@@ -71,6 +71,12 @@ const SHORTCUT_ICONS = {
   slot: "/shortcuts/slot.jpg",
 };
 
+const SHORTCUT_TEXT = {
+  flow: "Web Site",
+  stake: "Staking",
+  slot: "FlowLoyaltySlot",
+};
+
 const PremiumShortcutLink = ({ href, label, type, external = false }) => (
   <a
     href={href}
@@ -80,7 +86,7 @@ const PremiumShortcutLink = ({ href, label, type, external = false }) => (
     {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
   >
     <img src={SHORTCUT_ICONS[type]} alt="" aria-hidden="true" />
-    <span className="sr-only">{label}</span>
+    <span className="shortcut-caption" aria-hidden="true">{SHORTCUT_TEXT[type]}</span>
   </a>
 );
 
