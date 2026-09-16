@@ -40,6 +40,7 @@ const DEFAULT_STAKING_REWARD_FUNDING = {
   Loyal: 20_000,
   Whale: 30_000,
 };
+const EMPTY_POOL_APR_BENCHMARK = 100_000;
 const U64_MAX_VALUE = 18_446_744_073_709_551_615n;
 const SECONDS_PER_DAY = 86_400;
 const SECONDS_PER_YEAR = 31_536_000;
@@ -106,6 +107,17 @@ const formatApr = (apr) => {
   if (apr >= 1000) return `${apr.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`;
   if (apr >= 100) return `${apr.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
   return `${apr.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+};
+
+const formatMultiplier = (value) => {
+  if (!Number.isFinite(value)) return "--";
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}x`;
+};
+
+const formatCompactFlow = (value) => {
+  if (value >= 1_000_000) return `${value / 1_000_000}M`;
+  if (value >= 1_000) return `${value / 1_000}k`;
+  return String(value);
 };
 
 const getProjectedApr = (stats, stakeAmount) => {
@@ -545,10 +557,27 @@ function GameContainer() {
     const stats = stakingPoolStats[plan.name];
     if (!stats) return "Live APR";
     if (!stats.totalStaked) {
-      const firstStakeApr = getProjectedApr(stats, plan.min);
+      const firstStakeApr = getProjectedApr(stats, Math.max(EMPTY_POOL_APR_BENCHMARK, plan.min));
       return firstStakeApr === null ? "Pool empty" : `~${formatApr(firstStakeApr)}`;
     }
     return formatApr(stats.estimatedApr);
+  };
+
+  const getPlanCardSubLabel = (plan) => {
+    const stats = stakingPoolStats[plan.name];
+    if (stats && !stats.totalStaked) {
+      return `${plan.duration} / ${formatCompactFlow(Math.max(EMPTY_POOL_APR_BENCHMARK, plan.min))} est.`;
+    }
+    return plan.duration;
+  };
+
+  const getRewardWeightLabel = (planName) => {
+    const flexibleRewardPerDay = stakingPoolStats.Flexible?.rewardPerDay;
+    const planRewardPerDay = stakingPoolStats[planName]?.rewardPerDay;
+    if (!flexibleRewardPerDay || !planRewardPerDay) {
+      return STAKING_PLANS.find((plan) => plan.name === planName)?.boost || "--";
+    }
+    return formatMultiplier(planRewardPerDay / flexibleRewardPerDay);
   };
 
   const fetchStakingPoolStats = async () => {
@@ -1332,7 +1361,7 @@ function GameContainer() {
               >
                 <span>{plan.name}</span>
                 <strong>{getPlanAprLabel(plan)}</strong>
-                <small>{plan.duration}</small>
+                <small>{getPlanCardSubLabel(plan)}</small>
               </button>
             ))}
           </div>
@@ -1392,8 +1421,8 @@ function GameContainer() {
                 ? formatApr(activePoolStats.estimatedApr)
                 : formatApr(projectedStakeApr)}
             </strong>
-            <span>Loyalty boost</span>
-            <strong>{activeStakingPlan.boost}</strong>
+            <span>Reward weight</span>
+            <strong>{getRewardWeightLabel(activeStakingPlan.name)}</strong>
             <span>Total staked</span>
             <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
             <span>Staked</span>
