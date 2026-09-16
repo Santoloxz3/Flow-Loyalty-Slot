@@ -19,6 +19,8 @@ import "./App.css";
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
 const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
+const FLOW_ON_SUI_URL = "https://flowonsui.netlify.app";
+const STAKE_PATH = "/stake";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const FLOW_DECIMALS = 1_000_000_000n;
 const SUI_CLOCK_OBJECT_ID = "0x6";
@@ -1115,9 +1117,10 @@ function GameContainer() {
   }, []);
 
   const canShowWalletPanel = Boolean(isWalletReady && connected && account?.address);
+  const isStakePage = window.location.pathname.replace(/\/+$/, "").toLowerCase() === STAKE_PATH;
 
   return (
-    <main className="flow-page">
+    <main className={`flow-page ${isStakePage ? "flow-page-stake" : ""}`}>
     <section className="app-container" aria-label="Flow slot game">
       <div className="left-panel">
         {connected ? (
@@ -1155,6 +1158,14 @@ function GameContainer() {
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
               <p className="wallet-balance-line"><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
               <p className="slot-balance-line"><span className="wallet-line-icon" aria-hidden="true">🎰</span><strong> FLOW Slot:</strong> {slotBalance}</p>
+              <div className="wallet-quick-links" aria-label="Quick links">
+                <a href={FLOW_ON_SUI_URL} className="wallet-quick-link" title="FlowOnSui" aria-label="Open FlowOnSui">
+                  F
+                </a>
+                <a href={STAKE_PATH} className="wallet-quick-link" title="Stake" aria-label="Open staking page">
+                  S
+                </a>
+              </div>
               {balanceError ? <p className="wallet-warning">{balanceError}</p> : null}
               {freeSpinsLeft > 0 && (
 				<button
@@ -1313,7 +1324,36 @@ function GameContainer() {
       )}
     </section>
 
-    <section className="staking-section" id="staking" aria-labelledby="staking-title">
+    <section className="staking-section staking-page" id="staking" aria-labelledby="staking-title">
+      <div className="staking-topbar" aria-label="Staking navigation">
+        <a className="staking-home-link" href="/">
+          Slot
+        </a>
+        <div className="staking-topbar-actions">
+          <a href={FLOW_ON_SUI_URL} className="wallet-quick-link" title="FlowOnSui" aria-label="Open FlowOnSui">
+            F
+          </a>
+          {connected ? (
+            <button className="staking-connect-button" onClick={handleDisconnect}>
+              Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
+            </button>
+          ) : (
+            <button
+              className="staking-connect-button"
+              type="button"
+              onClick={() => {
+                if (wallets.length === 0) {
+                  toast.error("No Sui wallet found on this device.");
+                  return;
+                }
+                setShowWalletModal(true);
+              }}
+            >
+              Connect Wallet
+            </button>
+          )}
+        </div>
+      </div>
       <div className="staking-shell">
         <div className="staking-copy">
           <p className="staking-kicker">Sui testnet staking</p>
@@ -1498,6 +1538,31 @@ function GameContainer() {
           )}
         </div>
       </div>
+      <ToastContainer position="bottom-right" theme="dark" />
+      {showWalletModal && (
+        <div className="log-modal-backdrop" onClick={() => setShowWalletModal(false)}>
+          <div className="log-modal wallet-select-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Connect Wallet</h2>
+            <p className="wallet-select-hint">Open and unlock the wallet extension before selecting it.</p>
+            <div className="wallet-select-list">
+              {wallets.map((wallet) => (
+                <button
+                  key={wallet.id ?? wallet.name}
+                  type="button"
+                  className="wallet-select-option"
+                  onClick={() => handleConnectWallet(wallet)}
+                  disabled={Boolean(connectingWalletName)}
+                >
+                  {wallet.icon ? <img src={wallet.icon} alt="" /> : <span className="wallet-fallback-icon">◆</span>}
+                  <span>{wallet.name}</span>
+                  {connectingWalletName === wallet.name ? <small>Connecting...</small> : null}
+                </button>
+              ))}
+            </div>
+            <button className="btn btn-close" onClick={() => setShowWalletModal(false)}>✖ Close</button>
+          </div>
+        </div>
+      )}
     </section>
     </main>
   );

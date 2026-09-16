@@ -3,6 +3,14 @@
   background: #070713;
 }
 
+.flow-page:not(.flow-page-stake) .staking-section {
+  display: none;
+}
+
+.flow-page-stake .app-container {
+  display: none;
+}
+
 .app-container {
   display: flex;
   gap: 5rem;
@@ -22,6 +30,63 @@
     radial-gradient(circle at 88% 30%, rgba(255, 204, 0, 0.12), transparent 28%),
     #070713;
   color: #f6fbff;
+}
+
+.staking-page {
+  position: relative;
+  min-height: 100vh;
+  padding-top: 2rem;
+  background:
+    linear-gradient(180deg, rgba(7, 7, 19, 0.58), rgba(7, 7, 19, 0.92)),
+    url('/stake/flow-stake-background.jpg') center/cover fixed no-repeat;
+  overflow: hidden;
+}
+
+.staking-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 22% 22%, rgba(255, 204, 0, 0.22), transparent 32%),
+    radial-gradient(circle at 75% 35%, rgba(0, 255, 255, 0.18), transparent 30%);
+  pointer-events: none;
+}
+
+.staking-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.staking-topbar {
+  width: min(1180px, 100%);
+  margin: 0 auto 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.staking-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.staking-home-link,
+.staking-connect-button {
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(10, 12, 28, 0.72);
+  color: #fff7c5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-decoration: none;
 }
 
 .staking-shell {
@@ -429,6 +494,43 @@
 .slot-balance-line {
   margin: 0;
   margin-top: 2rem;
+}
+
+.wallet-quick-links {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.wallet-quick-link {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff7c5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 900;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.wallet-quick-link:hover,
+.staking-home-link:hover,
+.staking-connect-button:hover {
+  transform: translateY(-1px);
+  border-color: #ffcc00;
+  background: rgba(255, 204, 0, 0.18);
+}
+
+.staking-topbar-actions .wallet-quick-link {
+  position: static;
+  flex: 0 0 auto;
 }
 
 .wallet-line-icon {
@@ -1064,6 +1166,15 @@
 
   .staking-section {
     padding: 2rem 1rem 3rem;
+  }
+
+  .staking-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staking-topbar-actions {
+    justify-content: space-between;
   }
 
   .staking-plan-grid {
