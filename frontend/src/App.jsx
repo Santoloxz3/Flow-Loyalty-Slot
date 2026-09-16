@@ -73,7 +73,7 @@ const SHORTCUT_ICONS = {
 
 const SHORTCUT_TEXT = {
   flow: "Web Site",
-  stake: "Staking",
+  stake: "FlowLoyaltyStake",
   slot: "FlowLoyaltySlot",
 };
 
