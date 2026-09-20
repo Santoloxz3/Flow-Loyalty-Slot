@@ -222,6 +222,7 @@ function GameContainer() {
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
   const [stakingSpinsLeft, setStakingSpinsLeft] = useState(0);
+  const [stakingSpinPlan, setStakingSpinPlan] = useState("");
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
   const lastSpinGrantedRef = useRef(false);
   const pendingFreeSpinSourceRef = useRef("nft");
@@ -248,6 +249,11 @@ function GameContainer() {
   const activePoolStats = stakingPoolStats[activeStakingPlan.name];
   const projectedStakeApr = getProjectedApr(activePoolStats, stakingAmount);
   const pendingStakeRewards = calculatePendingStakeRewards(stakingPosition, activePoolStats);
+  const stakingSpinButtonText = stakingSpinPlan === "Whale"
+    ? `🐳 Whale Staking Spin (${stakingSpinsLeft})`
+    : stakingSpinPlan === "Loyal"
+      ? `🍀 Loyal Staking Spin (${stakingSpinsLeft})`
+      : `🔒 Staking Spin (${stakingSpinsLeft})`;
   const isFlexibleStakingPlan = activeStakingPlan.name === "Flexible";
   const isStakingUnlockLocked = Boolean(
     stakingPosition?.unlockTime &&
@@ -466,9 +472,15 @@ function GameContainer() {
       const res = await fetch(`${BACKEND_URL}/staking-free-spin?wallet=${account.address}`);
       const data = await res.json();
       setStakingSpinsLeft(res.ok ? data.spinsLeft ?? 0 : 0);
+      const availablePlan = Array.isArray(data.eligiblePlans)
+        ? data.eligiblePlans.find((plan) => plan.available && plan.plan === "Whale") ||
+          data.eligiblePlans.find((plan) => plan.available)
+        : null;
+      setStakingSpinPlan(res.ok && data.spinsLeft > 0 ? availablePlan?.plan || "" : "");
     } catch (err) {
       console.error("Error retrieving staking free spins:", err);
       setStakingSpinsLeft(0);
+      setStakingSpinPlan("");
     }
   };
 
@@ -1191,6 +1203,11 @@ function GameContainer() {
 		  if (res.ok) {
             if (isStakingSpin) {
 		      setStakingSpinsLeft(result.spinsLeft ?? 0);
+              const nextAvailablePlan = Array.isArray(result.eligiblePlans)
+                ? result.eligiblePlans.find((plan) => plan.available && plan.plan === "Whale") ||
+                  result.eligiblePlans.find((plan) => plan.available)
+                : null;
+              setStakingSpinPlan(result.spinsLeft > 0 ? nextAvailablePlan?.plan || "" : "");
             } else {
 		      setFreeSpinsLeft(result.spinsLeft ?? 0);
             }
@@ -1359,7 +1376,7 @@ function GameContainer() {
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
-				  🔒 Staking Spin ({stakingSpinsLeft})
+				  {stakingSpinButtonText}
 				</button>
               )}
 			  

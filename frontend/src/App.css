@@ -1041,7 +1041,10 @@
 }
 
 .btn-staking-spin {
-  font-size: 1.44rem;
+  font-size: 1.15rem;
+  padding-left: .75rem;
+  padding-right: .75rem;
+  white-space: nowrap;
 }
 
 .btn-free-spin.glow-effect {
