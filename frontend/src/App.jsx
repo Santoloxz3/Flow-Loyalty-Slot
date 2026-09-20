@@ -1359,7 +1359,7 @@ function GameContainer() {
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
-				  🔒 Staking Spin Available ({stakingSpinsLeft})
+				  Staking Spin ({stakingSpinsLeft})
 				</button>
               )}
 			  
