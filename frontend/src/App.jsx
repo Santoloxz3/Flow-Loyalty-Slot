@@ -26,6 +26,11 @@ const FLOW_DECIMALS = 1_000_000_000n;
 const SUI_CLOCK_OBJECT_ID = "0x6";
 const FLOW_STAKING_PACKAGE_ID = import.meta.env.VITE_FLOW_STAKING_PACKAGE_ID || "";
 const DEFAULT_FLOW_STAKING_POOL_ID = import.meta.env.VITE_FLOW_STAKING_POOL_ID || "";
+const DEFAULT_STAKING_POOL_IDS = {
+  Flexible: "0xb914f28e385b0d193c13e9cb9d6621466a209fd98376098aff97bc799b0bd234",
+  Loyal: "0x0aac4a32e17c57b45b83f1aa4c4ea8014e3601d63258c4e40ec7257e7c8a20f4",
+  Whale: "0xd2a17cf5c2554e8d16d19c6a0f3720fbc13663aefedcb528422c1b9dc675d40d",
+};
 const FLOW_STAKING_ADMIN_ADDRESS = "0xe8ec5bf9587b55547f0f58bcb3c7341e90dff8d1a10abbfe2b4728e52a7813e8";
 const FLOW_STAKING_ADMIN_CAP_IDS = {
   Flexible: "0x5540cf578ef5f5c81017c7d7d4b6bde5aa82266085c69a35cc81d75f4cc14ee8",
@@ -54,9 +59,9 @@ const networkConfig = {
 const createStubSuiClient = () => ({});
 
 const STAKING_PLANS = [
-  { name: "Flexible", duration: "0 days", boost: "1.0x", min: 10000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_FLEXIBLE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
-  { name: "Loyal", duration: "30 days", boost: "1.4x", min: 25000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_LOYAL_ID || DEFAULT_FLOW_STAKING_POOL_ID },
-  { name: "Whale", duration: "90 days", boost: "2.2x", min: 100000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_WHALE_ID || DEFAULT_FLOW_STAKING_POOL_ID },
+  { name: "Flexible", duration: "0 days", boost: "1.0x", min: 10000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_FLEXIBLE_ID || DEFAULT_FLOW_STAKING_POOL_ID || DEFAULT_STAKING_POOL_IDS.Flexible },
+  { name: "Loyal", duration: "30 days", boost: "1.4x", min: 25000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_LOYAL_ID || DEFAULT_STAKING_POOL_IDS.Loyal },
+  { name: "Whale", duration: "90 days", boost: "2.2x", min: 100000, poolId: import.meta.env.VITE_FLOW_STAKING_POOL_WHALE_ID || DEFAULT_STAKING_POOL_IDS.Whale },
 ];
 
 const STAKING_RESEARCH = [
