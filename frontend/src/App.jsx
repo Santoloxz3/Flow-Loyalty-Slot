@@ -11,6 +11,7 @@ import {
 import "@mysten/dapp-kit/dist/index.css";
 import { SuiGrpcClient } from "@mysten/sui/grpc";
 import { Transaction } from "@mysten/sui/transactions";
+import { fromBase64 } from "@mysten/sui/utils";
 import { ToastContainer, toast } from "react-toastify";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import 'react-toastify/dist/ReactToastify.css';
@@ -306,19 +307,50 @@ function GameContainer() {
       },
     };
 
-    const signAndExecuteFeature = currentWallet.features["sui:signAndExecuteTransaction"];
-    if (signAndExecuteFeature) {
-      return signAndExecuteFeature.signAndExecuteTransaction({
+    const assertExecuted = async (result) => {
+      const digest = result?.Transaction?.digest || result?.digest;
+      const executed = digest
+        ? await client.waitForTransaction({ digest, include: { effects: true }, timeout: 30_000 })
+        : result;
+      const status = executed?.Transaction?.status || executed?.effects?.status || result?.effects?.status;
+      const failed = status && status.success === false;
+
+      if (failed) {
+        throw new Error(status.error || "Transaction failed on Sui testnet.");
+      }
+
+      return executed;
+    };
+
+    const signTransactionFeature = currentWallet.features["sui:signTransaction"];
+    if (signTransactionFeature) {
+      const { bytes, signature } = await signTransactionFeature.signTransaction({
         transaction: walletTransaction,
         account,
         chain: "sui:testnet",
       });
+      const executed = await client.executeTransaction({
+        transaction: fromBase64(bytes),
+        signatures: [signature],
+        include: { effects: true },
+      });
+      return assertExecuted(executed);
+    }
+
+    const signAndExecuteFeature = currentWallet.features["sui:signAndExecuteTransaction"];
+    if (signAndExecuteFeature) {
+      const executed = await signAndExecuteFeature.signAndExecuteTransaction({
+        transaction: walletTransaction,
+        account,
+        chain: "sui:testnet",
+      });
+      return assertExecuted(executed);
     }
 
     const legacyFeature = currentWallet.features["sui:signAndExecuteTransactionBlock"];
     if (legacyFeature) {
       const transactionBlock = Transaction.from(await transaction.toJSON({ client }));
-      return legacyFeature.signAndExecuteTransactionBlock({
+      const executed = await legacyFeature.signAndExecuteTransactionBlock({
         transactionBlock,
         account,
         chain: "sui:testnet",
@@ -327,6 +359,7 @@ function GameContainer() {
           showRawInput: true,
         },
       });
+      return assertExecuted(executed);
     }
 
     throw new Error("The connected wallet does not support transaction execution.");
