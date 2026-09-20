@@ -1340,7 +1340,7 @@ function GameContainer() {
               )}
               {stakingSpinsLeft > 0 && (
 				<button
-				  className="btn btn-free-spin glow-effect"
+				  className="btn btn-free-spin btn-staking-spin glow-effect"
 				  onClick={async () => {
 					const ok = await checkBackendBalanceOk();
 					if (!ok) {
@@ -1359,7 +1359,7 @@ function GameContainer() {
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
-				  Staking Spin ({stakingSpinsLeft})
+				  🔒 Staking Spin ({stakingSpinsLeft})
 				</button>
               )}
 			  
