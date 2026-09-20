@@ -24,6 +24,7 @@ const FLOW_ON_SUI_URL = "https://flowonsui.netlify.app";
 const STAKE_PATH = "/stake";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
 const FLOW_DECIMALS = 1_000_000_000n;
+const STAKING_REWARD_PRECISION = 1_000_000_000_000n;
 const SUI_CLOCK_OBJECT_ID = "0x6";
 const FLOW_STAKING_PACKAGE_ID = import.meta.env.VITE_FLOW_STAKING_PACKAGE_ID || "";
 const DEFAULT_FLOW_STAKING_POOL_ID = import.meta.env.VITE_FLOW_STAKING_POOL_ID || "";
@@ -172,6 +173,32 @@ const getProjectedApr = (stats, stakeAmount) => {
   return ((stats.rewardPerDay * 365) / projectedTotalStaked) * 100;
 };
 
+const calculatePendingStakeRewards = (position, stats) => {
+  if (!position || !stats) return null;
+
+  try {
+    const amount = BigInt(position.amountBase || "0");
+    const rewardDebt = BigInt(position.rewardDebt || "0");
+    let accRewardPerShare = BigInt(stats.accRewardPerShare || "0");
+    const totalStaked = BigInt(stats.totalStakedBase || "0");
+    const rewardPerSecond = BigInt(stats.rewardPerSecondBase || "0");
+    const lastRewardTime = Number(stats.lastRewardTime || 0);
+    const now = Math.floor(Date.now() / 1000);
+
+    if (now > lastRewardTime && totalStaked > 0n) {
+      const elapsed = BigInt(now - lastRewardTime);
+      const reward = elapsed * rewardPerSecond;
+      accRewardPerShare += (reward * STAKING_REWARD_PRECISION) / totalStaked;
+    }
+
+    const accumulated = (amount * accRewardPerShare) / STAKING_REWARD_PRECISION;
+    const pending = accumulated > rewardDebt ? accumulated - rewardDebt : 0n;
+    return Number(pending) / Number(FLOW_DECIMALS);
+  } catch (error) {
+    return null;
+  }
+};
+
 function GameContainer() {
   const account = useCurrentAccount();
   const walletState = useCurrentWallet();
@@ -220,6 +247,13 @@ function GameContainer() {
   const isStakingAdminWallet = account?.address?.toLowerCase() === FLOW_STAKING_ADMIN_ADDRESS.toLowerCase();
   const activePoolStats = stakingPoolStats[activeStakingPlan.name];
   const projectedStakeApr = getProjectedApr(activePoolStats, stakingAmount);
+  const pendingStakeRewards = calculatePendingStakeRewards(stakingPosition, activePoolStats);
+  const isFlexibleStakingPlan = activeStakingPlan.name === "Flexible";
+  const isStakingUnlockLocked = Boolean(
+    stakingPosition?.unlockTime &&
+    !isFlexibleStakingPlan &&
+    stakingPosition.unlockTime > Math.floor(Date.now() / 1000)
+  );
 
   const clearTimers = (timersRef) => {
     timersRef.current.forEach((timerId) => window.clearTimeout(timerId));
@@ -717,6 +751,10 @@ function GameContainer() {
 
           return [plan.name, {
             paused: Boolean(fields.paused),
+            totalStakedBase: String(fields.total_staked || "0"),
+            rewardPerSecondBase: String(fields.reward_per_second || "0"),
+            accRewardPerShare: String(fields.acc_reward_per_share || "0"),
+            lastRewardTime: Number(fields.last_reward_time || 0),
             totalStaked,
             rewardPerDay,
             rewardBalance,
@@ -759,6 +797,8 @@ function GameContainer() {
           return {
             id: item.objectId,
             poolId: fields.pool_id,
+            amountBase: String(fields.amount || "0"),
+            rewardDebt: String(fields.reward_debt || "0"),
             amount: Number(fields.amount || 0) / Number(FLOW_DECIMALS),
             unlockTime: Number(fields.unlock_time || 0),
           };
@@ -847,6 +887,7 @@ function GameContainer() {
   const handleUnstake = async () => {
     if (!connected || !account?.address) return toast.error("Connect to the wallet.");
     if (!stakingPosition?.id) return toast.error("No staking position to unstake.");
+    if (isStakingUnlockLocked) return toast.error("This staking position is still locked.");
 
     setStakingLoading(true);
     try {
@@ -1599,9 +1640,11 @@ function GameContainer() {
             <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
             <span>Staked</span>
             <strong>{stakingPosition ? `${stakingPosition.amount} $FLOW` : "--"}</strong>
+            <span>Claimable</span>
+            <strong>{pendingStakeRewards !== null ? `${formatFlowAmount(pendingStakeRewards, 4)} $FLOW` : "--"}</strong>
             <span>Unlock</span>
             <strong>
-              {stakingPosition?.unlockTime
+              {stakingPosition?.unlockTime && !isFlexibleStakingPlan
                 ? new Date(stakingPosition.unlockTime * 1000).toLocaleDateString()
                 : "--"}
             </strong>
@@ -1617,7 +1660,7 @@ function GameContainer() {
             <button type="button" onClick={handleClaimRewards} disabled={stakingLoading || !stakingPosition}>
               Claim
             </button>
-            <button type="button" onClick={handleUnstake} disabled={stakingLoading || !stakingPosition}>
+            <button type="button" onClick={handleUnstake} disabled={stakingLoading || !stakingPosition || isStakingUnlockLocked}>
               Unstake
             </button>
           </div>
