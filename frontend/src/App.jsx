@@ -298,6 +298,23 @@ function GameContainer() {
       throw new Error("No wallet connected.");
     }
 
+    const [{ chainIdentifier }, { systemState }] = await Promise.all([
+      client.core.getChainIdentifier(),
+      client.core.getCurrentSystemState(),
+    ]);
+    const currentEpoch = BigInt(systemState.epoch);
+    transaction.setExpiration({
+      $kind: "ValidDuring",
+      ValidDuring: {
+        minEpoch: String(currentEpoch),
+        maxEpoch: String(currentEpoch + 1n),
+        minTimestamp: null,
+        maxTimestamp: null,
+        chain: chainIdentifier,
+        nonce: Math.floor(Math.random() * 0x100000000),
+      },
+    });
+
     const walletTransaction = {
       async toJSON() {
         return transaction.toJSON({ client });
