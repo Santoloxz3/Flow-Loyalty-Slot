@@ -188,8 +188,10 @@ function GameContainer() {
   const [connectingWalletName, setConnectingWalletName] = useState("");
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
+  const [stakingSpinsLeft, setStakingSpinsLeft] = useState(0);
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
   const lastSpinGrantedRef = useRef(false);
+  const pendingFreeSpinSourceRef = useRef("nft");
   const backgroundMusicRef = useRef(null);
   const balancePostTimersRef = useRef([]);
   const balanceRefreshTimersRef = useRef([]);
@@ -353,6 +355,7 @@ function GameContainer() {
       window.setTimeout(() => {
         fetchStakingPoolStats();
         fetchStakingPosition();
+        fetchStakingFreeSpins();
       }, delay);
     });
   };
@@ -365,6 +368,18 @@ function GameContainer() {
       setFreeSpinsLeft(data.spinsLeft ?? 0);
     } catch (err) {
       console.error("Error retrieving free spins:", err);
+    }
+  };
+
+  const fetchStakingFreeSpins = async () => {
+    if (!account?.address) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/staking-free-spin?wallet=${account.address}`);
+      const data = await res.json();
+      setStakingSpinsLeft(res.ok ? data.spinsLeft ?? 0 : 0);
+    } catch (err) {
+      console.error("Error retrieving staking free spins:", err);
+      setStakingSpinsLeft(0);
     }
   };
 
@@ -731,6 +746,7 @@ function GameContainer() {
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
+      await fetchStakingFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
@@ -762,6 +778,7 @@ function GameContainer() {
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
+      await fetchStakingFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
@@ -793,6 +810,7 @@ function GameContainer() {
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
+      await fetchStakingFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
@@ -966,6 +984,7 @@ function GameContainer() {
     }
     fetchBalances();
     fetchFreeSpins();
+    fetchStakingFreeSpins();
 	fetchHighBalanceSpin();
 
 
@@ -1065,7 +1084,8 @@ function GameContainer() {
 
 	  if (data.type === "FREE_SPIN_USED_NFT") {  
 	    try {
-			  const res = await fetch(`${BACKEND_URL}/free-spin`, {
+          const isStakingSpin = pendingFreeSpinSourceRef.current === "staking";
+			  const res = await fetch(`${BACKEND_URL}${isStakingSpin ? "/staking-free-spin" : "/free-spin"}`, {
 		    method: "POST",
 		    headers: { "Content-Type": "application/json" },
 		    body: JSON.stringify({ wallet: account.address }),
@@ -1073,12 +1093,18 @@ function GameContainer() {
 
 		  const result = await res.json();
 		  if (res.ok) {
-		    setFreeSpinsLeft(result.spinsLeft ?? 0);
+            if (isStakingSpin) {
+		      setStakingSpinsLeft(result.spinsLeft ?? 0);
+            } else {
+		      setFreeSpinsLeft(result.spinsLeft ?? 0);
+            }
 		  } else {
-		    toast.error(result.message || "Error using NFT spin");
+		    toast.error(result.message || (isStakingSpin ? "Error using staking spin" : "Error using NFT spin"));
 		  }
+          pendingFreeSpinSourceRef.current = "nft";
 	    } catch (err) {
-		  console.error("Error recording NFT spin:", err);
+		  console.error("Error recording free spin:", err);
+          pendingFreeSpinSourceRef.current = "nft";
 	    }
 	  }
 
@@ -1121,6 +1147,7 @@ function GameContainer() {
         fetchBalances({ silent: true });
         fetchStakingPoolStats();
         fetchStakingPosition();
+        fetchStakingFreeSpins();
       }
     };
 
@@ -1128,6 +1155,7 @@ function GameContainer() {
       fetchBalances({ silent: true });
       fetchStakingPoolStats();
       fetchStakingPosition();
+      fetchStakingFreeSpins();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityRefresh);
@@ -1207,10 +1235,35 @@ function GameContainer() {
 					  return;
 					}
                     lastSpinGrantedRef.current = true;; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO					
+                    pendingFreeSpinSourceRef.current = "nft";
 					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
 				  }}
 				>
 				  🎁 NFT Spin Available ({freeSpinsLeft})
+				</button>
+              )}
+              {stakingSpinsLeft > 0 && (
+				<button
+				  className="btn btn-free-spin glow-effect"
+				  onClick={async () => {
+					const ok = await checkBackendBalanceOk();
+					if (!ok) {
+					  toast.error("Reward wallet empty. Please wait for refill.");
+					  return;
+					}
+                    const res = await fetch(`${BACKEND_URL}/staking-free-spin?wallet=${account.address}`);
+                    const data = await res.json();
+                    if (!res.ok || !data.spinsLeft) {
+					  toast.error(data.message || "Staking spin already used");
+					  setStakingSpinsLeft(0);
+					  return;
+                    }
+                    lastSpinGrantedRef.current = true;
+                    pendingFreeSpinSourceRef.current = "staking";
+					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
+				  }}
+				>
+				  🔒 Staking Spin Available ({stakingSpinsLeft})
 				</button>
               )}
 			  
