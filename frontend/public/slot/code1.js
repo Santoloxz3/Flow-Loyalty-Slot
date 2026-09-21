@@ -418,6 +418,16 @@ isConditionTrue_0 = gdjs.evtTools.runtimeScene.sceneJustBegins(runtimeScene);
 if (isConditionTrue_0) {
 gdjs.copyArray(runtimeScene.getObjects("FLOW_1"), gdjs.SlotMachineCode.GDFLOW_95951Objects1);
 {gdjs.evtTools.advancedWindow.setFullScreenable(true, runtimeScene);
+}{
+  // XP build: remove legacy local controls to avoid bypassing backend-authorized NFT spins.
+  for (const objectName of ["SPIN", "AUTOSPIN", "Autoplay", "AutoSpin"]) {
+    const objects = runtimeScene.getObjects(objectName);
+    for (const object of objects) {
+      object.deleteFromScene(runtimeScene);
+    }
+  }
+  window.__loyaltyXpMode = true;
+  window.parent.postMessage({ type: "SLOT_READY", mode: "nft-xp" }, "*");
 }{for(var i = 0, len = gdjs.SlotMachineCode.GDFLOW_95951Objects1.length ;i < len;++i) {
     gdjs.SlotMachineCode.GDFLOW_95951Objects1[i].getBehavior("ShakeObject_PositionAngle").ShakeObject_PositionAngle(20, 0, 10, 0, 2, true, (typeof eventsFunctionContext !== 'undefined' ? eventsFunctionContext : undefined));
 }
