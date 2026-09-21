@@ -2,6 +2,7 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { createSuiTestnetClient } from "./suiClient.mjs";
+import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
 
 const client = createSuiTestnetClient();
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -30,13 +31,30 @@ function getRewardForRoll(roll) {
   return RESULT_RULES.find((rule) => roll <= rule.maxRoll) || RESULT_RULES[0];
 }
 
+async function verifySpinAuthorization({ wallet, requestId, timestamp, signature }) {
+  const numericTimestamp = Number(timestamp);
+  if (!signature || !Number.isFinite(numericTimestamp)) return false;
+  if (Math.abs(Date.now() - numericTimestamp) > 5 * 60 * 1000) return false;
+
+  const message = `Authorize FLOW NFT loyalty spin for wallet: ${wallet}, request: ${requestId}, timestamp: ${numericTimestamp}`;
+  try {
+    await verifyPersonalMessageSignature(new TextEncoder().encode(message), signature, {
+      address: wallet,
+    });
+    return true;
+  } catch (error) {
+    console.warn("[loyalty] invalid spin signature:", error?.message || error);
+    return false;
+  }
+}
+
 function getLegacyFallbackRule(spinsPerDay) {
-  const allowance = Math.max(1, Number(spinsPerDay || 1));
+  const legacyAllowance = Math.max(1, Number(spinsPerDay || 1));
   const rarity =
-    allowance >= 5 ? "legendary" :
-    allowance >= 3 ? "high" :
+    legacyAllowance >= 5 ? "legendary" :
+    legacyAllowance >= 3 ? "high" :
     "medium";
-  return { rarity, spins: allowance, windowHours: 24, legacyFallback: true };
+  return { ...RARITY_RULES[rarity], legacyFallback: true };
 }
 
 async function getOwnedEligibleNfts(wallet) {
@@ -206,7 +224,15 @@ export async function getLoyaltyStatus(req, res) {
 export async function startLoyaltySpin(req, res) {
   const wallet = req.body?.wallet;
   const requestId = String(req.body?.requestId || "").trim() || crypto.randomUUID();
+  const timestamp = req.body?.timestamp;
+  const signature = req.body?.signature;
+
   if (!wallet) return res.status(400).json({ message: "Wallet required" });
+
+  const authorized = await verifySpinAuthorization({ wallet, requestId, timestamp, signature });
+  if (!authorized) {
+    return res.status(401).json({ message: "Wallet signature required for NFT Free Spin" });
+  }
 
   try {
     const existing = await getExistingSpin(wallet, requestId);
