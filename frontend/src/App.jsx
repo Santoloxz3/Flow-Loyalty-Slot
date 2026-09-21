@@ -223,6 +223,7 @@ function GameContainer() {
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
   const [loyaltyProfile, setLoyaltyProfile] = useState(null);
   const [lastLoyaltySpin, setLastLoyaltySpin] = useState(null);
+  const [loyaltyDiagnostics, setLoyaltyDiagnostics] = useState(null);
   const [stakingSpinsLeft, setStakingSpinsLeft] = useState(0);
   const [stakingSpinPlan, setStakingSpinPlan] = useState("");
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
@@ -463,12 +464,18 @@ function GameContainer() {
     try {
       const res = await fetch(`${BACKEND_URL}/loyalty/status?wallet=${account.address}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Unable to load loyalty status");
+      if (!res.ok) {
+        const detail = data.diagnosticError ? `${data.message}: ${data.diagnosticError}` : data.message;
+        throw new Error(detail || "Unable to load loyalty status");
+      }
       setFreeSpinsLeft(data.spinsLeft ?? 0);
       setLoyaltyProfile(data.profile ?? null);
+      setLoyaltyDiagnostics(data.diagnostics ?? null);
+      console.info("[loyalty] diagnostics", data.diagnostics ?? null);
     } catch (err) {
       console.error("Error retrieving NFT loyalty status:", err);
       setFreeSpinsLeft(0);
+      setLoyaltyDiagnostics({ error: err?.message || String(err) });
     }
   };
 
@@ -1431,6 +1438,22 @@ function GameContainer() {
               >
                 🎁 NFT Free Spin ({freeSpinsLeft})
               </button>
+
+              {freeSpinsLeft === 0 && loyaltyDiagnostics ? (
+                <div className="loyalty-diagnostics">
+                  <strong>Preview NFT diagnostics</strong>
+                  {"error" in loyaltyDiagnostics ? (
+                    <span>{loyaltyDiagnostics.error}</span>
+                  ) : (
+                    <>
+                      <span>Wallet objects seen: {loyaltyDiagnostics.ownedObjectCount ?? 0}</span>
+                      <span>Whitelist matches: {loyaltyDiagnostics.whitelistMatches?.length ?? 0}</span>
+                      <span>Rarity matches: {loyaltyDiagnostics.rarityMatches?.length ?? 0}</span>
+                      <span>Eligible NFTs: {loyaltyDiagnostics.eligibleMatches?.length ?? 0}</span>
+                    </>
+                  )}
+                </div>
+              ) : null}
 
               {lastLoyaltySpin ? (
                 <div className="loyalty-last-spin">
