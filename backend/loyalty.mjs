@@ -48,17 +48,25 @@ async function verifySpinAuthorization({ wallet, requestId, timestamp, signature
   }
 }
 
-async function getOwnedEligibleNfts(wallet) {
+async function discoverOwnedEligibleNfts(wallet) {
   // Keep NFT discovery aligned with the proven legacy implementation.
-  // We only need objectId here; requesting extra JSON is unnecessary and can
-  // make the gRPC call fail on some provider/client combinations.
   const owned = await client.listOwnedObjects({
     owner: wallet,
     include: { content: true },
   });
 
   const objectIds = (owned.objects || []).map((item) => item.objectId).filter(Boolean);
-  if (!objectIds.length) return [];
+
+  const diagnostics = {
+    ownedObjectCount: objectIds.length,
+    whitelistMatches: [],
+    rarityMatches: [],
+    eligibleMatches: [],
+  };
+
+  if (!objectIds.length) {
+    return { eligibleNfts: [], diagnostics };
+  }
 
   const [{ data: whitelist, error: whitelistError }, { data: rarityRows, error: rarityError }] =
     await Promise.all([
@@ -72,13 +80,26 @@ async function getOwnedEligibleNfts(wallet) {
         .in("object_id", objectIds),
     ]);
 
-  if (whitelistError) throw whitelistError;
-  if (rarityError) throw rarityError;
-  if (!whitelist?.length) return [];
+  if (whitelistError) {
+    throw new Error(`WHITELIST_QUERY_FAILED: ${whitelistError.message || whitelistError}`);
+  }
+  if (rarityError) {
+    throw new Error(`RARITY_QUERY_FAILED: ${rarityError.message || rarityError}`);
+  }
+
+  diagnostics.whitelistMatches = (whitelist || []).map((row) => row.object_id);
+  diagnostics.rarityMatches = (rarityRows || []).map((row) => ({
+    objectId: row.object_id,
+    rarity: row.rarity,
+  }));
+
+  if (!whitelist?.length) {
+    return { eligibleNfts: [], diagnostics };
+  }
 
   const rarityMap = new Map((rarityRows || []).map((row) => [normalize(row.object_id), row.rarity]));
 
-  return whitelist
+  const eligibleNfts = whitelist
     .map((row) => {
       const configuredRarity = rarityMap.get(normalize(row.object_id));
       const rule = configuredRarity ? RARITY_RULES[configuredRarity] : null;
@@ -99,6 +120,20 @@ async function getOwnedEligibleNfts(wallet) {
       };
     })
     .filter(Boolean);
+
+  diagnostics.eligibleMatches = eligibleNfts.map((nft) => ({
+    objectId: nft.objectId,
+    rarity: nft.rarity,
+    allowance: nft.allowance,
+    windowHours: nft.windowHours,
+  }));
+
+  return { eligibleNfts, diagnostics };
+}
+
+async function getOwnedEligibleNfts(wallet) {
+  const { eligibleNfts } = await discoverOwnedEligibleNfts(wallet);
+  return eligibleNfts;
 }
 
 async function getUsage(wallet, objectIds) {
@@ -203,8 +238,8 @@ export async function getLoyaltyStatus(req, res) {
   if (!wallet) return res.status(400).json({ message: "Wallet required" });
 
   try {
-    const [eligibleNfts, profile] = await Promise.all([
-      getOwnedEligibleNfts(wallet),
+    const [{ eligibleNfts, diagnostics }, profile] = await Promise.all([
+      discoverOwnedEligibleNfts(wallet),
       getProfile(wallet),
     ]);
     const nftStatus = await getAvailability(wallet, eligibleNfts);
@@ -215,10 +250,16 @@ export async function getLoyaltyStatus(req, res) {
       nftStatus,
       profile,
       rules: RARITY_RULES,
+      ...(process.env.IS_PULL_REQUEST === "true" ? { diagnostics } : {}),
     });
   } catch (error) {
     console.error("[loyalty] status failed:", error);
-    return res.status(500).json({ message: "Unable to load loyalty status" });
+    return res.status(500).json({
+      message: "Unable to load loyalty status",
+      ...(process.env.IS_PULL_REQUEST === "true"
+        ? { diagnosticError: error?.message || String(error) }
+        : {}),
+    });
   }
 }
 
