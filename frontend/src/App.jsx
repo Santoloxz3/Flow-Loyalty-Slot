@@ -67,9 +67,18 @@ const STAKING_PLANS = [
 ];
 
 const STAKING_RESEARCH = [
-  "Local Move draft added: generic $FLOW pool, position object, lock duration and reward funding.",
-  "Reference code had gaps around admin-cap and position-pool checks; the draft guards both.",
-  "Keep this in preview until Move tests, testnet rehearsal and independent audit are complete.",
+  "Stake $FLOW without mixing staked funds with the slot.",
+  "NFT Free Spins build Total XP and can unlock temporary Staking Reward Boosts.",
+  "Your boost applies to staking rewards only: principal and lock rules stay unchanged.",
+];
+
+const LOYALTY_TIER_UI = [
+  { name: "STARTER", xp: 0, boost: 0 },
+  { name: "FLOWER", xp: 500, boost: 5 },
+  { name: "HOLDER", xp: 1500, boost: 10 },
+  { name: "WHALE", xp: 4000, boost: 15 },
+  { name: "LEGEND", xp: 10000, boost: 20 },
+  { name: "FLOW GOD", xp: 25000, boost: 25 },
 ];
 
 const SHORTCUT_ICONS = {
@@ -173,6 +182,18 @@ const getProjectedApr = (stats, stakeAmount) => {
   return ((stats.rewardPerDay * 365) / projectedTotalStaked) * 100;
 };
 
+const formatBoostRemaining = (expiresAt) => {
+  if (!expiresAt) return "No active boost";
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "Expired";
+  const hours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  if (days > 0) return `${days}d ${remainingHours}h remaining`;
+  const minutes = Math.max(1, Math.floor(ms / 60_000));
+  return hours > 0 ? `${hours}h remaining` : `${minutes}m remaining`;
+};
+
 const calculatePendingStakeRewards = (position, stats) => {
   if (!position || !stats) return null;
 
@@ -249,11 +270,30 @@ function GameContainer() {
   const [adminRewardFunding, setAdminRewardFunding] = useState(DEFAULT_STAKING_REWARD_FUNDING);
   const [stakingAdminLoading, setStakingAdminLoading] = useState(false);
   const [stakingAdminStatus, setStakingAdminStatus] = useState("Connect admin wallet to manage rewards.");
+  const [lastStakingBoostResult, setLastStakingBoostResult] = useState(null);
   const activeStakingPlan = STAKING_PLANS.find((plan) => plan.name === selectedStakingPlan) ?? STAKING_PLANS[0];
   const isStakingAdminWallet = account?.address?.toLowerCase() === FLOW_STAKING_ADMIN_ADDRESS.toLowerCase();
   const activePoolStats = stakingPoolStats[activeStakingPlan.name];
   const projectedStakeApr = getProjectedApr(activePoolStats, stakingAmount);
   const pendingStakeRewards = calculatePendingStakeRewards(stakingPosition, activePoolStats);
+  const activeStakingBoost = Math.max(0, Number(loyaltyProfile?.activeStakingBoost || 0));
+  const pendingBoostReward = pendingStakeRewards === null
+    ? null
+    : (pendingStakeRewards * activeStakingBoost) / 100;
+  const pendingTotalReward = pendingStakeRewards === null
+    ? null
+    : pendingStakeRewards + (pendingBoostReward || 0);
+  const currentTotalXp = Math.max(0, Number(loyaltyProfile?.totalXp || 0));
+  const currentTierLabel = String(loyaltyProfile?.currentTier || "starter").replaceAll("_", " ").toUpperCase();
+  const nextLoyaltyTier = LOYALTY_TIER_UI.find((tier) => tier.xp > currentTotalXp) || null;
+  const xpToNextTier = nextLoyaltyTier ? Math.max(0, nextLoyaltyTier.xp - currentTotalXp) : 0;
+  const currentTierFloor = [...LOYALTY_TIER_UI].reverse().find((tier) => currentTotalXp >= tier.xp)?.xp || 0;
+  const nextTierProgress = nextLoyaltyTier
+    ? Math.min(100, Math.max(0, ((currentTotalXp - currentTierFloor) / Math.max(1, nextLoyaltyTier.xp - currentTierFloor)) * 100))
+    : 100;
+  const boostRemainingLabel = activeStakingBoost > 0
+    ? formatBoostRemaining(loyaltyProfile?.boostExpiresAt)
+    : "No active boost";
   const stakingSpinButtonText = stakingSpinPlan === "Whale"
     ? `🐳 Whale Staking Spin (${stakingSpinsLeft})`
     : stakingSpinPlan === "Loyal"
@@ -1331,6 +1371,7 @@ function GameContainer() {
         fetchStakingPoolStats();
         fetchStakingPosition();
         fetchStakingFreeSpins();
+        fetchFreeSpins();
       }
     };
 
@@ -1339,6 +1380,7 @@ function GameContainer() {
       fetchStakingPoolStats();
       fetchStakingPosition();
       fetchStakingFreeSpins();
+      fetchFreeSpins();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityRefresh);
