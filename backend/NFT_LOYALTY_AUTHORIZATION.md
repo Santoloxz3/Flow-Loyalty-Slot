@@ -18,20 +18,18 @@ The legacy `spins_per_day` value is no longer authoritative for the XP system.
 
 ## Add a new authorized NFT
 
-Insert the Object ID in the whitelist, then assign its rarity:
+Preferred method:
 
 ```sql
-insert into public.nft_spin_whitelist(object_id, spins_per_day)
-values ('0xOBJECT_ID', 1)
-on conflict (object_id) do nothing;
-
-insert into public.nft_loyalty_rarity(object_id, rarity)
-values ('0xOBJECT_ID', 'medium')
-on conflict (object_id) do update
-set rarity = excluded.rarity;
+select public.upsert_loyalty_nft('0xOBJECT_ID', 'medium');
 ```
 
-The `spins_per_day` value in the first insert is retained only because it is part of the legacy table schema. The new loyalty backend ignores it.
+Only two values are needed:
+
+- Sui Object ID
+- rarity: `low`, `medium`, `high`, or `legendary`
+
+The helper updates both `nft_spin_whitelist` and `nft_loyalty_rarity`. It also fills the legacy `spins_per_day` field automatically for compatibility. The new loyalty backend ignores that legacy field and derives allowance/cooldown from rarity.
 
 ## Remove authorization
 
