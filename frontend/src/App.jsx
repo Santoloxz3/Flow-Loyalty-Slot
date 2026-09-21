@@ -221,6 +221,7 @@ function GameContainer() {
   const [connectingWalletName, setConnectingWalletName] = useState("");
   const [spinLog, setSpinLog] = useState([]);
   const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
+  const [slotReady, setSlotReady] = useState(false);
   const [loyaltyProfile, setLoyaltyProfile] = useState(null);
   const [lastLoyaltySpin, setLastLoyaltySpin] = useState(null);
   const [loyaltyDiagnostics, setLoyaltyDiagnostics] = useState(null);
@@ -627,6 +628,7 @@ function GameContainer() {
   const handleLoyaltySpin = async () => {
     if (!connected || !account?.address) return toast.error("Connect to the wallet.");
     if (freeSpinsLeft <= 0) return toast.error("No NFT Free Spins available.");
+    if (!slotReady) return toast.info("Open the slot first: press Play in the game frame.");
 
     const iframe = document.querySelector("iframe");
     if (!iframe?.contentWindow) return toast.error("Slot not active.");
@@ -1219,6 +1221,12 @@ function GameContainer() {
       if (!data || !data.type) return;
 	  
       console.log("📩 Messaggio ricevuto da iframe:", data);
+
+      if (data.type === "SLOT_READY") {
+        setSlotReady(true);
+        console.info("Slot ready for backend-authorized NFT spins.");
+        return;
+      }
 	  
       if (data.type === "SPIN_REQUEST") {
         // Legacy frame request: ignore silently. NFT spins are started only
@@ -1432,10 +1440,13 @@ function GameContainer() {
               <button
                 className="btn btn-free-spin glow-effect"
                 onClick={handleLoyaltySpin}
-                disabled={loading || freeSpinsLeft <= 0}
+                disabled={loading || freeSpinsLeft <= 0 || !slotReady}
               >
                 🎁 NFT Free Spin ({freeSpinsLeft})
               </button>
+              {!slotReady ? (
+                <small className="slot-ready-hint">Press Play in the slot frame before using an NFT Free Spin.</small>
+              ) : null}
 
               {freeSpinsLeft === 0 && loyaltyDiagnostics ? (
                 <div className="loyalty-diagnostics">
@@ -1488,6 +1499,7 @@ function GameContainer() {
 		    className="game-frame"
 		    onLoad={() => {
 		  	  console.log("📥 iframe caricato");
+              setSlotReady(false);
 			  syncBalanceToGame(slotBalance ?? 0);
 		    }}
 		  />
