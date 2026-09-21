@@ -320,7 +320,8 @@ window.addEventListener("message", (event) => {
   const data = event.data;
 
   if (data?.type === "FREE_SPIN_AVAILABLE_NFT") {
-    // avvia spin gratuito da NFT; il risultato viene scelto dal backend.
+    // NFT/XP mode: only an authorized parent request may start the reels.
+    window.__loyaltyXpMode = true;
     const forcedRoll = Number(data.roll);
     if (Number.isInteger(forcedRoll) && forcedRoll >= 1 && forcedRoll <= 100) {
       window.__forcedLoyaltyRoll = forcedRoll;
@@ -2346,8 +2347,11 @@ isConditionTrue_0 = false;
 }
 if (isConditionTrue_0) {
 
-{ //Subevents
-gdjs.SlotMachineCode.eventsList17(runtimeScene);} //End of subevents
+{ // Legacy paid spin disabled in NFT/XP mode.
+if (window.__loyaltyXpMode !== true) {
+  // In the XP build the SPIN control is display-only; do not start local reels.
+}
+} //End of legacy paid-spin block
 }
 
 }
@@ -2863,6 +2867,10 @@ runtimeScene.getAsyncTasksManager().addTask(gdjs.evtTools.runtimeScene.wait(0.3)
 
 
 };gdjs.SlotMachineCode.eventsList61 = function(runtimeScene) {
+if (window.__loyaltyXpMode === true) {
+  window.parent.postMessage({ type: "SPIN_WIN", amount: 0, xpMode: true }, "*");
+  return;
+}
 
 {
 
