@@ -1678,12 +1678,51 @@ function GameContainer() {
       </div>
       <div className="staking-shell">
         <div className="staking-copy">
-          <p className="staking-kicker">Sui testnet staking</p>
-          <h2 id="staking-title">$FLOW Staking Vault</h2>
+          <p className="staking-kicker">NFT loyalty × Sui staking</p>
+          <h2 id="staking-title">$FLOW Loyalty Staking</h2>
           <p>
-            A staking layer for players who want to lock $FLOW, earn scheduled rewards and unlock
-            extra loyalty multipliers without mixing slot balance and staked funds.
+            Stake $FLOW as usual and let your NFT activity work on top of it. Total XP can unlock
+            temporary Staking Reward Boosts that increase the reward paid after a verified claim or unstake.
           </p>
+
+          <div className="staking-loyalty-card" aria-label="Loyalty staking status">
+            <div className="staking-loyalty-head">
+              <div>
+                <span>Your loyalty status</span>
+                <strong>{currentTierLabel}</strong>
+              </div>
+              <div className={`staking-boost-badge ${activeStakingBoost > 0 ? "active" : ""}`}>
+                {activeStakingBoost > 0 ? `+${activeStakingBoost}%` : "No boost"}
+              </div>
+            </div>
+
+            <div className="staking-loyalty-metrics">
+              <div>
+                <span>Total XP</span>
+                <strong>{currentTotalXp.toLocaleString()}</strong>
+              </div>
+              <div>
+                <span>Staking Reward Boost</span>
+                <strong>{activeStakingBoost > 0 ? `+${activeStakingBoost}%` : "None"}</strong>
+              </div>
+              <div>
+                <span>Boost remaining</span>
+                <strong>{boostRemainingLabel}</strong>
+              </div>
+            </div>
+
+            <div className="staking-tier-progress" aria-label="Progress to next loyalty tier">
+              <div className="staking-tier-progress-track">
+                <span style={{ width: `${nextTierProgress}%` }} />
+              </div>
+              <small>
+                {nextLoyaltyTier
+                  ? `${xpToNextTier.toLocaleString()} XP to ${nextLoyaltyTier.name} · +${nextLoyaltyTier.boost}% boost`
+                  : "Maximum loyalty tier reached"}
+              </small>
+            </div>
+          </div>
+
           <div className="staking-research">
             {STAKING_RESEARCH.map((item) => (
               <span key={item}>{item}</span>
@@ -1704,6 +1743,7 @@ function GameContainer() {
                 fetchBalances();
                 fetchStakingPoolStats();
                 fetchStakingPosition();
+                fetchFreeSpins();
               }}
             >
               Refresh
@@ -1752,9 +1792,10 @@ function GameContainer() {
                 {activePoolStats ? `${formatFlowAmount(activePoolStats.rewardBalance, 2)} FLOW` : "--"}
               </strong>
             </div>
-            <div>
-              <span>APY</span>
-              <strong>Manual claim</strong>
+            <div className={activeStakingBoost > 0 ? "boosted" : ""}>
+              <span>XP boost</span>
+              <strong>{activeStakingBoost > 0 ? `+${activeStakingBoost}% active` : "Not active"}</strong>
+              <small>{activeStakingBoost > 0 ? boostRemainingLabel : "Earn Total XP in the slot"}</small>
             </div>
           </div>
 
@@ -1774,42 +1815,95 @@ function GameContainer() {
             <button type="button" onClick={() => setStakingAmount((value) => value + 10000)}>+</button>
           </div>
 
-          <div className="staking-summary">
-            <span>Lock</span>
-            <strong>{activeStakingPlan.duration}</strong>
-            <span>{activePoolStats?.totalStaked ? "Live APR" : "APR after stake"}</span>
-            <strong>
-              {activePoolStats?.totalStaked
-                ? formatApr(activePoolStats.estimatedApr)
-                : formatApr(projectedStakeApr)}
-            </strong>
-            <span>Reward weight</span>
-            <strong>{getRewardWeightLabel(activeStakingPlan.name)}</strong>
-            <span>XP Reward Boost</span>
-            <strong>{loyaltyProfile?.activeStakingBoost > 0 ? `+${loyaltyProfile.activeStakingBoost}%` : "None"}</strong>
-            <span>Total staked</span>
-            <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
-            <span>Staked</span>
-            <strong>{stakingPosition ? `${stakingPosition.amount} $FLOW` : "--"}</strong>
-            <span>Claimable</span>
-            <strong>{pendingStakeRewards !== null ? `${formatFlowAmount(pendingStakeRewards, 4)} $FLOW` : "--"}</strong>
-            <span>Unlock</span>
-            <strong>
-              {stakingPosition?.unlockTime && !isFlexibleStakingPlan
-                ? new Date(stakingPosition.unlockTime * 1000).toLocaleDateString()
-                : "--"}
-            </strong>
+          <div className="staking-position-card">
+            <div className="staking-position-head">
+              <div>
+                <span>Position</span>
+                <strong>{activeStakingPlan.name}</strong>
+              </div>
+              <small>{stakingPosition ? "Active position" : "No active position"}</small>
+            </div>
+
+            <div className="staking-position-meta">
+              <div>
+                <span>Lock</span>
+                <strong>{activeStakingPlan.duration}</strong>
+              </div>
+              <div>
+                <span>Reward weight</span>
+                <strong>{getRewardWeightLabel(activeStakingPlan.name)}</strong>
+              </div>
+              <div>
+                <span>Total staked</span>
+                <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
+              </div>
+              <div>
+                <span>Your stake</span>
+                <strong>{stakingPosition ? `${stakingPosition.amount} FLOW` : "--"}</strong>
+              </div>
+              <div>
+                <span>Unlock</span>
+                <strong>
+                  {stakingPosition?.unlockTime && !isFlexibleStakingPlan
+                    ? new Date(stakingPosition.unlockTime * 1000).toLocaleDateString()
+                    : isFlexibleStakingPlan && stakingPosition ? "Any time" : "--"}
+                </strong>
+              </div>
+            </div>
+
+            <div className="staking-reward-breakdown" aria-label="Staking reward preview">
+              <div>
+                <span>Base reward</span>
+                <strong>{pendingStakeRewards !== null ? `${formatFlowAmount(pendingStakeRewards, 6)} FLOW` : "--"}</strong>
+              </div>
+              <div className={activeStakingBoost > 0 ? "reward-boost-row active" : "reward-boost-row"}>
+                <span>XP boost {activeStakingBoost > 0 ? `(+${activeStakingBoost}%)` : ""}</span>
+                <strong>{pendingBoostReward !== null ? `+${formatFlowAmount(pendingBoostReward, 6)} FLOW` : "--"}</strong>
+              </div>
+              <div className="staking-reward-total">
+                <span>Total claimable</span>
+                <strong>{pendingTotalReward !== null ? `${formatFlowAmount(pendingTotalReward, 6)} FLOW` : "--"}</strong>
+              </div>
+              <small>
+                The XP bonus is paid separately only after the backend verifies the successful on-chain staking reward transaction.
+              </small>
+            </div>
           </div>
+
+          {lastStakingBoostResult ? (
+            <div className={`staking-boost-result ${lastStakingBoostResult.status}`}>
+              <div>
+                <span>Last {lastStakingBoostResult.action || "staking"} result</span>
+                <strong>
+                  {lastStakingBoostResult.status === "success"
+                    ? lastStakingBoostResult.bonusFlow > 0
+                      ? `+${formatFlowAmount(lastStakingBoostResult.bonusFlow, 6)} FLOW boost paid`
+                      : "No boost due"
+                    : "Boost needs attention"}
+                </strong>
+              </div>
+              {lastStakingBoostResult.status === "success" ? (
+                <small>
+                  Base {formatFlowAmount(lastStakingBoostResult.baseRewardFlow, 6)} FLOW ·
+                  {" "}Boost {lastStakingBoostResult.boostPercent || 0}% ·
+                  {" "}Total {formatFlowAmount(lastStakingBoostResult.finalRewardFlow, 6)} FLOW
+                  {lastStakingBoostResult.alreadyProcessed ? " · already processed" : ""}
+                </small>
+              ) : (
+                <small>{lastStakingBoostResult.message}</small>
+              )}
+            </div>
+          ) : null}
 
           <p className="staking-pool-note">{stakingPoolStatus}</p>
           <p className={`staking-status ${isStakingConfigured ? "ready" : ""}`}>{stakingStatus}</p>
 
           <div className="staking-actions">
             <button type="button" onClick={handleStake} disabled={stakingLoading || !isStakingConfigured}>
-              Stake
+              {stakingLoading ? "Working..." : "Stake"}
             </button>
             <button type="button" onClick={handleClaimRewards} disabled={stakingLoading || !stakingPosition}>
-              Claim
+              Claim rewards
             </button>
             <button type="button" onClick={handleUnstake} disabled={stakingLoading || !stakingPosition || isStakingUnlockLocked}>
               Unstake
