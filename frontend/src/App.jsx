@@ -19,7 +19,7 @@ import "./App.css";
 
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
-const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
+const BACKEND_URL = "https://flow-loyalty-backend-pr-1.onrender.com"; // PR preview only; restore production URL before merge
 const FLOW_ON_SUI_URL = "https://flowonsui.netlify.app";
 const STAKE_PATH = "/stake";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
