@@ -1402,7 +1402,7 @@ function GameContainer() {
         </button>
         {canShowWalletPanel ? (
           <>
-            <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
+            <div className={`wallet-box loyalty-wallet-box ${flashWin ? "flash-win" : ""}`}>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
               <p className="wallet-balance-line"><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
               <div className="loyalty-summary-card">
@@ -1437,15 +1437,14 @@ function GameContainer() {
                 ) : null}
               </div>
 
-              <button
-                className="btn btn-free-spin glow-effect"
-                onClick={handleLoyaltySpin}
-                disabled={loading || freeSpinsLeft <= 0 || !slotReady}
-              >
-                🎁 NFT Free Spin ({freeSpinsLeft})
-              </button>
-              {!slotReady ? (
-                <small className="slot-ready-hint">Press Play in the slot frame before using an NFT Free Spin.</small>
+              {lastLoyaltySpin ? (
+                <div className="loyalty-last-spin">
+                  <strong>{String(lastLoyaltySpin.resultCode || "spin").replaceAll("_", " ").toUpperCase()}</strong>
+                  <span>
+                    +{lastLoyaltySpin.loyaltyXp} Loyalty XP · +{lastLoyaltySpin.bonusXp} Bonus XP ·
+                    {" "}+{lastLoyaltySpin.spinTotalXp} Total XP
+                  </span>
+                </div>
               ) : null}
 
               {freeSpinsLeft === 0 && loyaltyDiagnostics ? (
@@ -1464,19 +1463,23 @@ function GameContainer() {
                 </div>
               ) : null}
 
-              {lastLoyaltySpin ? (
-                <div className="loyalty-last-spin">
-                  <strong>{String(lastLoyaltySpin.resultCode || "spin").replaceAll("_", " ").toUpperCase()}</strong>
-                  <span>
-                    +{lastLoyaltySpin.loyaltyXp} Loyalty XP · +{lastLoyaltySpin.bonusXp} Bonus XP ·
-                    {" "}+{lastLoyaltySpin.spinTotalXp} Total XP
-                  </span>
-                </div>
-              ) : null}
+              <div className="loyalty-action-stack">
+                <button
+                  className="btn btn-free-spin glow-effect"
+                  onClick={handleLoyaltySpin}
+                  disabled={loading || freeSpinsLeft <= 0 || !slotReady}
+                >
+                  🎁 NFT Free Spin ({freeSpinsLeft})
+                </button>
 
-              <button className="btn btn-log" onClick={() => setShowLogModal(true)}>
-                📜 View XP Logs
-              </button>
+                {!slotReady ? (
+                  <small className="slot-ready-hint">Press Play in the slot frame before using a Free Spin.</small>
+                ) : null}
+
+                <button className="btn btn-log" onClick={() => setShowLogModal(true)}>
+                  📜 XP Logs
+                </button>
+              </div>
             </div>
           </>
         ) : (
