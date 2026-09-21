@@ -630,10 +630,20 @@ function GameContainer() {
         globalThis.crypto?.randomUUID?.() ||
         `${account.address}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+      const timestamp = Date.now();
+      const authMessage =
+        `Authorize FLOW NFT loyalty spin for wallet: ${account.address}, request: ${requestId}, timestamp: ${timestamp}`;
+      const signed = await signMessageWithWallet(new TextEncoder().encode(authMessage));
+
       const res = await fetch(`${BACKEND_URL}/loyalty/spin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: account.address, requestId }),
+        body: JSON.stringify({
+          wallet: account.address,
+          requestId,
+          timestamp,
+          signature: signed.signature,
+        }),
       });
 
       const result = await res.json();
@@ -992,12 +1002,34 @@ function GameContainer() {
       });
       tx.transferObjects([principal, reward], account.address);
 
-      await executeTransactionWithWallet(tx);
-      toast.success("Unstake completed.");
+      const executed = await executeTransactionWithWallet(tx);
+      const unstakeDigest = executed?.Transaction?.digest || executed?.digest || null;
+
+      let boostMessage = "";
+      if (unstakeDigest) {
+        try {
+          const boostRes = await fetch(`${BACKEND_URL}/staking-boost/claim`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet: account.address, digest: unstakeDigest }),
+          });
+          const boostData = await boostRes.json();
+          if (boostRes.ok && Number(boostData.bonusFlow || 0) > 0) {
+            boostMessage = ` + ${formatFlowAmount(Number(boostData.bonusFlow), 6)} FLOW XP boost`;
+          } else if (!boostRes.ok) {
+            console.warn("[staking-boost] unstake bonus processing failed", boostData);
+          }
+        } catch (boostError) {
+          console.warn("[staking-boost] unable to process unstake bonus", boostError);
+        }
+      }
+
+      toast.success(`Unstake completed.${boostMessage}`);
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
       await fetchStakingFreeSpins();
+      await fetchFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
