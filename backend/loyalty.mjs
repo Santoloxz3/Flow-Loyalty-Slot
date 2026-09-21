@@ -48,15 +48,6 @@ async function verifySpinAuthorization({ wallet, requestId, timestamp, signature
   }
 }
 
-function getLegacyFallbackRule(spinsPerDay) {
-  const legacyAllowance = Math.max(1, Number(spinsPerDay || 1));
-  const rarity =
-    legacyAllowance >= 5 ? "legendary" :
-    legacyAllowance >= 3 ? "high" :
-    "medium";
-  return { ...RARITY_RULES[rarity], legacyFallback: true };
-}
-
 async function getOwnedEligibleNfts(wallet) {
   const owned = await client.listOwnedObjects({
     owner: wallet,
@@ -85,19 +76,27 @@ async function getOwnedEligibleNfts(wallet) {
 
   const rarityMap = new Map((rarityRows || []).map((row) => [normalize(row.object_id), row.rarity]));
 
-  return whitelist.map((row) => {
-    const configuredRarity = rarityMap.get(normalize(row.object_id));
-    const configuredRule = configuredRarity ? RARITY_RULES[configuredRarity] : null;
-    const rule = configuredRule || getLegacyFallbackRule(row.spins_per_day);
+  return whitelist
+    .map((row) => {
+      const configuredRarity = rarityMap.get(normalize(row.object_id));
+      const rule = configuredRarity ? RARITY_RULES[configuredRarity] : null;
 
-    return {
-      objectId: row.object_id,
-      rarity: rule.rarity,
-      allowance: rule.spins,
-      windowHours: rule.windowHours,
-      legacyFallback: Boolean(rule.legacyFallback),
-    };
-  });
+      if (!rule) {
+        console.warn(
+          "[loyalty] whitelisted NFT has no configured rarity and will be ignored:",
+          row.object_id,
+        );
+        return null;
+      }
+
+      return {
+        objectId: row.object_id,
+        rarity: rule.rarity,
+        allowance: rule.spins,
+        windowHours: rule.windowHours,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function getUsage(wallet, objectIds) {
