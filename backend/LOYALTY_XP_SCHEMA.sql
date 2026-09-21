@@ -92,23 +92,23 @@ as $$
 begin
   insert into public.loyalty_profiles(wallet)
   values (p_wallet)
-  on conflict (wallet) do nothing;
+  on conflict on constraint loyalty_profiles_pkey do nothing;
 
-  update public.loyalty_profiles
+  update public.loyalty_profiles as lp
   set active_staking_boost = 0,
       boost_started_at = null,
       boost_expires_at = null,
       updated_at = now()
-  where loyalty_profiles.wallet = p_wallet
-    and active_staking_boost > 0
-    and boost_expires_at is not null
-    and boost_expires_at <= now();
+  where lp.wallet = p_wallet
+    and lp.active_staking_boost > 0
+    and lp.boost_expires_at is not null
+    and lp.boost_expires_at <= now();
 
   return query
-  select p.wallet, p.loyalty_xp, p.bonus_xp, p.total_xp, p.current_tier,
-         p.highest_tier_rank, p.active_staking_boost, p.boost_started_at, p.boost_expires_at
-  from public.loyalty_profiles p
-  where p.wallet = p_wallet;
+  select lp.wallet, lp.loyalty_xp, lp.bonus_xp, lp.total_xp, lp.current_tier,
+         lp.highest_tier_rank, lp.active_staking_boost, lp.boost_started_at, lp.boost_expires_at
+  from public.loyalty_profiles as lp
+  where lp.wallet = p_wallet;
 end;
 $$;
 
