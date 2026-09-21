@@ -200,10 +200,25 @@ export async function claimStakingBoost(req, res) {
       updated_at: new Date().toISOString(),
     };
 
-    const { error: upsertError } = await supabase
+    const { error: insertError } = await supabase
       .from("staking_boost_claims")
-      .upsert(row, { onConflict: "claim_digest" });
-    if (upsertError) throw upsertError;
+      .insert(row);
+
+    if (insertError) {
+      if (insertError.code === "23505") {
+        const concurrent = await loadClaim(digest);
+        if (concurrent?.status === "success") {
+          return res.json({
+            alreadyProcessed: true,
+            boostPercent: Number(concurrent.boost_percent || 0),
+            bonusFlow: Number(concurrent.bonus_reward_nanos || 0) / 1e9,
+            bonusTx: concurrent.bonus_tx_hash || null,
+          });
+        }
+        return res.status(409).json({ message: "This staking claim is already being processed" });
+      }
+      throw insertError;
+    }
 
     try {
       const bonusTx = await payBonus(wallet, bonusNanos);
