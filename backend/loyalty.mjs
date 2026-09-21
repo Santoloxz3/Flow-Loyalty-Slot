@@ -49,10 +49,12 @@ async function verifySpinAuthorization({ wallet, requestId, timestamp, signature
 }
 
 async function getOwnedEligibleNfts(wallet) {
+  // Keep NFT discovery aligned with the proven legacy implementation.
+  // We only need objectId here; requesting extra JSON is unnecessary and can
+  // make the gRPC call fail on some provider/client combinations.
   const owned = await client.listOwnedObjects({
     owner: wallet,
-    include: { content: true, json: true },
-    limit: 200,
+    include: { content: true },
   });
 
   const objectIds = (owned.objects || []).map((item) => item.objectId).filter(Boolean);
