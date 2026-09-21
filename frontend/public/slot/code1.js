@@ -320,7 +320,11 @@ window.addEventListener("message", (event) => {
   const data = event.data;
 
   if (data?.type === "FREE_SPIN_AVAILABLE_NFT") {
-    // avvia spin gratuito da NFT
+    // avvia spin gratuito da NFT; il risultato viene scelto dal backend.
+    const forcedRoll = Number(data.roll);
+    if (Number.isInteger(forcedRoll) && forcedRoll >= 1 && forcedRoll <= 100) {
+      window.__forcedLoyaltyRoll = forcedRoll;
+    }
     runtimeScene.getVariables().get("freeSpinAvailableNFT").setNumber(1);
   }
 
@@ -880,7 +884,13 @@ runtimeScene.getAsyncTasksManager().addTask(gdjs.evtTools.runtimeScene.wait(0.3)
 
 };gdjs.SlotMachineCode.asyncCallback13629340 = function (runtimeScene, asyncObjectsList) {
 asyncObjectsList.restoreLocalVariablesContainers(gdjs.SlotMachineCode.localVariables);
-{runtimeScene.getScene().getVariables().getFromIndex(10).setNumber(gdjs.randomInRange(1, 100));
+{const forcedRoll = Number(window.__forcedLoyaltyRoll);
+runtimeScene.getScene().getVariables().getFromIndex(10).setNumber(
+  Number.isInteger(forcedRoll) && forcedRoll >= 1 && forcedRoll <= 100
+    ? forcedRoll
+    : gdjs.randomInRange(1, 100)
+);
+window.__forcedLoyaltyRoll = null;
 }
 { //Subevents
 gdjs.SlotMachineCode.eventsList18(runtimeScene, asyncObjectsList);} //End of subevents
