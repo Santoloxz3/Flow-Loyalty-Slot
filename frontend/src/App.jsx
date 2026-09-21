@@ -1445,6 +1445,7 @@ function GameContainer() {
               <button className="btn btn-log" onClick={() => setShowLogModal(true)}>
                 📜 View XP Logs
               </button>
+            </div>
           </>
         ) : (
           <div className="wallet-warning">❌ Unauthorized wallet</div>
