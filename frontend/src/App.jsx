@@ -1221,11 +1221,9 @@ function GameContainer() {
       console.log("📩 Messaggio ricevuto da iframe:", data);
 	  
       if (data.type === "SPIN_REQUEST") {
-        console.warn("Paid spin rejected: FlowLoyaltySlot is NFT Free Spin only.");
-        event.source?.postMessage(
-          { type: "SPIN_DENIED", reason: "Use an NFT Free Spin from the FLOW Loyalty panel." },
-          "*",
-        );
+        // Legacy frame request: ignore silently. NFT spins are started only
+        // through handleLoyaltySpin after backend authorization.
+        console.info("Legacy frame spin ignored in NFT/XP mode.");
         return;
       }
 
