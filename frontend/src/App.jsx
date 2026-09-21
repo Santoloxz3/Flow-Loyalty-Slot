@@ -979,11 +979,72 @@ function GameContainer() {
     }
   };
 
+  const processStakingBoostForDigest = async (digest, actionLabel) => {
+    if (!digest) {
+      const result = {
+        status: "warning",
+        action: actionLabel,
+        message: "Staking transaction completed, but no digest was returned for XP boost verification.",
+      };
+      setLastStakingBoostResult(result);
+      return result;
+    }
+
+    try {
+      const boostRes = await fetch(`${BACKEND_URL}/staking-boost/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: account.address, digest }),
+      });
+      const boostData = await boostRes.json();
+
+      if (!boostRes.ok) {
+        const result = {
+          status: "warning",
+          action: actionLabel,
+          digest,
+          message: boostData.message || "XP boost could not be processed.",
+        };
+        setLastStakingBoostResult(result);
+        return result;
+      }
+
+      const result = {
+        status: "success",
+        action: actionLabel,
+        digest,
+        alreadyProcessed: Boolean(boostData.alreadyProcessed),
+        boostPercent: Number(boostData.boostPercent || 0),
+        baseRewardFlow: Number(boostData.baseRewardFlow || 0),
+        bonusFlow: Number(boostData.bonusFlow || 0),
+        finalRewardFlow: Number(
+          boostData.finalRewardFlow ??
+          (Number(boostData.baseRewardFlow || 0) + Number(boostData.bonusFlow || 0))
+        ),
+        bonusTx: boostData.bonusTx || null,
+        message: boostData.message || null,
+      };
+      setLastStakingBoostResult(result);
+      return result;
+    } catch (boostError) {
+      console.warn("[staking-boost] unable to process bonus", boostError);
+      const result = {
+        status: "warning",
+        action: actionLabel,
+        digest,
+        message: boostError?.message || "Unable to contact XP boost service.",
+      };
+      setLastStakingBoostResult(result);
+      return result;
+    }
+  };
+
   const handleClaimRewards = async () => {
     if (!connected || !account?.address) return toast.error("Connect to the wallet.");
     if (!stakingPosition?.id) return toast.error("No staking position to claim.");
 
     setStakingLoading(true);
+    setLastStakingBoostResult(null);
     try {
       const tx = new Transaction();
       tx.setSender(account.address);
@@ -997,28 +1058,17 @@ function GameContainer() {
 
       const executed = await executeTransactionWithWallet(tx);
       const claimDigest = executed?.Transaction?.digest || executed?.digest || null;
+      const boostResult = await processStakingBoostForDigest(claimDigest, "Claim");
 
-      let boostMessage = "";
-      if (claimDigest) {
-        try {
-          const boostRes = await fetch(`${BACKEND_URL}/staking-boost/claim`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet: account.address, digest: claimDigest }),
-          });
-          const boostData = await boostRes.json();
-
-          if (boostRes.ok && Number(boostData.bonusFlow || 0) > 0) {
-            boostMessage = ` + ${formatFlowAmount(Number(boostData.bonusFlow), 6)} FLOW XP boost`;
-          } else if (!boostRes.ok) {
-            console.warn("[staking-boost] bonus processing failed", boostData);
-          }
-        } catch (boostError) {
-          console.warn("[staking-boost] unable to process bonus", boostError);
-        }
+      if (boostResult?.status === "success") {
+        const bonusText = boostResult.bonusFlow > 0
+          ? ` + ${formatFlowAmount(boostResult.bonusFlow, 6)} FLOW XP boost`
+          : "";
+        toast.success(`Rewards claimed.${bonusText}`);
+      } else {
+        toast.warning(`Rewards claimed on-chain. ${boostResult?.message || "XP boost requires review."}`);
       }
 
-      toast.success(`Rewards claimed.${boostMessage}`);
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
@@ -1040,6 +1090,7 @@ function GameContainer() {
     if (isStakingUnlockLocked) return toast.error("This staking position is still locked.");
 
     setStakingLoading(true);
+    setLastStakingBoostResult(null);
     try {
       const tx = new Transaction();
       tx.setSender(account.address);
@@ -1053,27 +1104,17 @@ function GameContainer() {
 
       const executed = await executeTransactionWithWallet(tx);
       const unstakeDigest = executed?.Transaction?.digest || executed?.digest || null;
+      const boostResult = await processStakingBoostForDigest(unstakeDigest, "Unstake");
 
-      let boostMessage = "";
-      if (unstakeDigest) {
-        try {
-          const boostRes = await fetch(`${BACKEND_URL}/staking-boost/claim`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet: account.address, digest: unstakeDigest }),
-          });
-          const boostData = await boostRes.json();
-          if (boostRes.ok && Number(boostData.bonusFlow || 0) > 0) {
-            boostMessage = ` + ${formatFlowAmount(Number(boostData.bonusFlow), 6)} FLOW XP boost`;
-          } else if (!boostRes.ok) {
-            console.warn("[staking-boost] unstake bonus processing failed", boostData);
-          }
-        } catch (boostError) {
-          console.warn("[staking-boost] unable to process unstake bonus", boostError);
-        }
+      if (boostResult?.status === "success") {
+        const bonusText = boostResult.bonusFlow > 0
+          ? ` + ${formatFlowAmount(boostResult.bonusFlow, 6)} FLOW XP boost`
+          : "";
+        toast.success(`Unstake completed.${bonusText}`);
+      } else {
+        toast.warning(`Unstake completed on-chain. ${boostResult?.message || "XP boost requires review."}`);
       }
 
-      toast.success(`Unstake completed.${boostMessage}`);
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
