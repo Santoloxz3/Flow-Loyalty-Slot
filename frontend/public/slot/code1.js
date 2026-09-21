@@ -320,7 +320,12 @@ window.addEventListener("message", (event) => {
   const data = event.data;
 
   if (data?.type === "FREE_SPIN_AVAILABLE_NFT") {
-    // avvia spin gratuito da NFT
+    // NFT/XP mode: only an authorized parent request may start the reels.
+    window.__loyaltyXpMode = true;
+    const forcedRoll = Number(data.roll);
+    if (Number.isInteger(forcedRoll) && forcedRoll >= 1 && forcedRoll <= 100) {
+      window.__forcedLoyaltyRoll = forcedRoll;
+    }
     runtimeScene.getVariables().get("freeSpinAvailableNFT").setNumber(1);
   }
 
@@ -413,6 +418,16 @@ isConditionTrue_0 = gdjs.evtTools.runtimeScene.sceneJustBegins(runtimeScene);
 if (isConditionTrue_0) {
 gdjs.copyArray(runtimeScene.getObjects("FLOW_1"), gdjs.SlotMachineCode.GDFLOW_95951Objects1);
 {gdjs.evtTools.advancedWindow.setFullScreenable(true, runtimeScene);
+}{
+  // XP build: remove legacy local controls to avoid bypassing backend-authorized NFT spins.
+  for (const objectName of ["SPIN", "AUTOSPIN", "Autoplay", "AutoSpin"]) {
+    const objects = runtimeScene.getObjects(objectName);
+    for (const object of objects) {
+      object.deleteFromScene(runtimeScene);
+    }
+  }
+  window.__loyaltyXpMode = true;
+  window.parent.postMessage({ type: "SLOT_READY", mode: "nft-xp" }, "*");
 }{for(var i = 0, len = gdjs.SlotMachineCode.GDFLOW_95951Objects1.length ;i < len;++i) {
     gdjs.SlotMachineCode.GDFLOW_95951Objects1[i].getBehavior("ShakeObject_PositionAngle").ShakeObject_PositionAngle(20, 0, 10, 0, 2, true, (typeof eventsFunctionContext !== 'undefined' ? eventsFunctionContext : undefined));
 }
@@ -880,7 +895,13 @@ runtimeScene.getAsyncTasksManager().addTask(gdjs.evtTools.runtimeScene.wait(0.3)
 
 };gdjs.SlotMachineCode.asyncCallback13629340 = function (runtimeScene, asyncObjectsList) {
 asyncObjectsList.restoreLocalVariablesContainers(gdjs.SlotMachineCode.localVariables);
-{runtimeScene.getScene().getVariables().getFromIndex(10).setNumber(gdjs.randomInRange(1, 100));
+{const forcedRoll = Number(window.__forcedLoyaltyRoll);
+runtimeScene.getScene().getVariables().getFromIndex(10).setNumber(
+  Number.isInteger(forcedRoll) && forcedRoll >= 1 && forcedRoll <= 100
+    ? forcedRoll
+    : gdjs.randomInRange(1, 100)
+);
+window.__forcedLoyaltyRoll = null;
 }
 { //Subevents
 gdjs.SlotMachineCode.eventsList18(runtimeScene, asyncObjectsList);} //End of subevents
@@ -2336,8 +2357,11 @@ isConditionTrue_0 = false;
 }
 if (isConditionTrue_0) {
 
-{ //Subevents
-gdjs.SlotMachineCode.eventsList17(runtimeScene);} //End of subevents
+{ // Legacy paid spin disabled in NFT/XP mode.
+if (window.__loyaltyXpMode !== true) {
+  // In the XP build the SPIN control is display-only; do not start local reels.
+}
+} //End of legacy paid-spin block
 }
 
 }
@@ -2853,6 +2877,10 @@ runtimeScene.getAsyncTasksManager().addTask(gdjs.evtTools.runtimeScene.wait(0.3)
 
 
 };gdjs.SlotMachineCode.eventsList61 = function(runtimeScene) {
+if (window.__loyaltyXpMode === true) {
+  window.parent.postMessage({ type: "SPIN_WIN", amount: 0, xpMode: true }, "*");
+  return;
+}
 
 {
 

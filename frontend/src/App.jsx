@@ -19,7 +19,7 @@ import "./App.css";
 
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
-const BACKEND_URL = "https://flow-loyalty-backend.onrender.com";
+const BACKEND_URL = "https://flow-loyalty-backend-pr-1.onrender.com"; // PR preview only; restore production URL before merge
 const FLOW_ON_SUI_URL = "https://flowonsui.netlify.app";
 const STAKE_PATH = "/stake";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
@@ -67,9 +67,18 @@ const STAKING_PLANS = [
 ];
 
 const STAKING_RESEARCH = [
-  "Local Move draft added: generic $FLOW pool, position object, lock duration and reward funding.",
-  "Reference code had gaps around admin-cap and position-pool checks; the draft guards both.",
-  "Keep this in preview until Move tests, testnet rehearsal and independent audit are complete.",
+  "Stake $FLOW without mixing staked funds with the slot.",
+  "NFT Free Spins build Total XP and can unlock temporary Staking Reward Boosts.",
+  "Your boost applies to staking rewards only: principal and lock rules stay unchanged.",
+];
+
+const LOYALTY_TIER_UI = [
+  { name: "STARTER", xp: 0, boost: 0 },
+  { name: "FLOWER", xp: 500, boost: 5 },
+  { name: "HOLDER", xp: 1500, boost: 10 },
+  { name: "WHALE", xp: 4000, boost: 15 },
+  { name: "LEGEND", xp: 10000, boost: 20 },
+  { name: "FLOW GOD", xp: 25000, boost: 25 },
 ];
 
 const SHORTCUT_ICONS = {
@@ -173,6 +182,18 @@ const getProjectedApr = (stats, stakeAmount) => {
   return ((stats.rewardPerDay * 365) / projectedTotalStaked) * 100;
 };
 
+const formatBoostRemaining = (expiresAt) => {
+  if (!expiresAt) return "No active boost";
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "Expired";
+  const hours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  if (days > 0) return `${days}d ${remainingHours}h remaining`;
+  const minutes = Math.max(1, Math.floor(ms / 60_000));
+  return hours > 0 ? `${hours}h remaining` : `${minutes}m remaining`;
+};
+
 const calculatePendingStakeRewards = (position, stats) => {
   if (!position || !stats) return null;
 
@@ -220,12 +241,17 @@ function GameContainer() {
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [connectingWalletName, setConnectingWalletName] = useState("");
   const [spinLog, setSpinLog] = useState([]);
-  const [freeSpinsLeft, setFreeSpinsLeft] = useState(0); // ✅ NUOVO STATO
+  const [freeSpinsLeft, setFreeSpinsLeft] = useState(0);
+  const [slotReady, setSlotReady] = useState(false);
+  const [loyaltyProfile, setLoyaltyProfile] = useState(null);
+  const [lastLoyaltySpin, setLastLoyaltySpin] = useState(null);
+  const [loyaltyDiagnostics, setLoyaltyDiagnostics] = useState(null);
   const [stakingSpinsLeft, setStakingSpinsLeft] = useState(0);
   const [stakingSpinPlan, setStakingSpinPlan] = useState("");
   const [highBalanceCanSpin, setHighBalanceCanSpin] = useState(false);
   const lastSpinGrantedRef = useRef(false);
   const pendingFreeSpinSourceRef = useRef("nft");
+  const pendingLoyaltySpinRef = useRef(null);
   const backgroundMusicRef = useRef(null);
   const balancePostTimersRef = useRef([]);
   const balanceRefreshTimersRef = useRef([]);
@@ -244,11 +270,30 @@ function GameContainer() {
   const [adminRewardFunding, setAdminRewardFunding] = useState(DEFAULT_STAKING_REWARD_FUNDING);
   const [stakingAdminLoading, setStakingAdminLoading] = useState(false);
   const [stakingAdminStatus, setStakingAdminStatus] = useState("Connect admin wallet to manage rewards.");
+  const [lastStakingBoostResult, setLastStakingBoostResult] = useState(null);
   const activeStakingPlan = STAKING_PLANS.find((plan) => plan.name === selectedStakingPlan) ?? STAKING_PLANS[0];
   const isStakingAdminWallet = account?.address?.toLowerCase() === FLOW_STAKING_ADMIN_ADDRESS.toLowerCase();
   const activePoolStats = stakingPoolStats[activeStakingPlan.name];
   const projectedStakeApr = getProjectedApr(activePoolStats, stakingAmount);
   const pendingStakeRewards = calculatePendingStakeRewards(stakingPosition, activePoolStats);
+  const activeStakingBoost = Math.max(0, Number(loyaltyProfile?.activeStakingBoost || 0));
+  const pendingBoostReward = pendingStakeRewards === null
+    ? null
+    : (pendingStakeRewards * activeStakingBoost) / 100;
+  const pendingTotalReward = pendingStakeRewards === null
+    ? null
+    : pendingStakeRewards + (pendingBoostReward || 0);
+  const currentTotalXp = Math.max(0, Number(loyaltyProfile?.totalXp || 0));
+  const currentTierLabel = String(loyaltyProfile?.currentTier || "starter").replaceAll("_", " ").toUpperCase();
+  const nextLoyaltyTier = LOYALTY_TIER_UI.find((tier) => tier.xp > currentTotalXp) || null;
+  const xpToNextTier = nextLoyaltyTier ? Math.max(0, nextLoyaltyTier.xp - currentTotalXp) : 0;
+  const currentTierFloor = [...LOYALTY_TIER_UI].reverse().find((tier) => currentTotalXp >= tier.xp)?.xp || 0;
+  const nextTierProgress = nextLoyaltyTier
+    ? Math.min(100, Math.max(0, ((currentTotalXp - currentTierFloor) / Math.max(1, nextLoyaltyTier.xp - currentTierFloor)) * 100))
+    : 100;
+  const boostRemainingLabel = activeStakingBoost > 0
+    ? formatBoostRemaining(loyaltyProfile?.boostExpiresAt)
+    : "No active boost";
   const stakingSpinButtonText = stakingSpinPlan === "Whale"
     ? `🐳 Whale Staking Spin (${stakingSpinsLeft})`
     : stakingSpinPlan === "Loyal"
@@ -458,11 +503,20 @@ function GameContainer() {
   const fetchFreeSpins = async () => {
     if (!account?.address) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/free-spin?wallet=${account.address}`);
+      const res = await fetch(`${BACKEND_URL}/loyalty/status?wallet=${account.address}`);
       const data = await res.json();
+      if (!res.ok) {
+        const detail = data.diagnosticError ? `${data.message}: ${data.diagnosticError}` : data.message;
+        throw new Error(detail || "Unable to load loyalty status");
+      }
       setFreeSpinsLeft(data.spinsLeft ?? 0);
+      setLoyaltyProfile(data.profile ?? null);
+      setLoyaltyDiagnostics(data.diagnostics ?? null);
+      console.info("[loyalty] diagnostics", data.diagnostics ?? null);
     } catch (err) {
-      console.error("Error retrieving free spins:", err);
+      console.error("Error retrieving NFT loyalty status:", err);
+      setFreeSpinsLeft(0);
+      setLoyaltyDiagnostics({ error: err?.message || String(err) });
     }
   };
 
@@ -609,6 +663,67 @@ function GameContainer() {
       toast.error("Unexpected error during withdrawal");
     }
     setLoading(false);
+  };
+
+  const handleLoyaltySpin = async () => {
+    if (!connected || !account?.address) return toast.error("Connect to the wallet.");
+    if (freeSpinsLeft <= 0) return toast.error("No NFT Free Spins available.");
+    if (!slotReady) return toast.info("Open the slot first: press Play in the game frame.");
+
+    const iframe = document.querySelector("iframe");
+    if (!iframe?.contentWindow) return toast.error("Slot not active.");
+
+    setLoading(true);
+    try {
+      const requestId =
+        globalThis.crypto?.randomUUID?.() ||
+        `${account.address}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+      const timestamp = Date.now();
+      const authMessage =
+        `Authorize FLOW NFT loyalty spin for wallet: ${account.address}, request: ${requestId}, timestamp: ${timestamp}`;
+      const signed = await signMessageWithWallet(new TextEncoder().encode(authMessage));
+
+      const res = await fetch(`${BACKEND_URL}/loyalty/spin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet: account.address,
+          requestId,
+          timestamp,
+          signature: signed.signature,
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        toast.error(result.message || "NFT Free Spin unavailable");
+        await fetchFreeSpins();
+        return;
+      }
+
+      pendingLoyaltySpinRef.current = result;
+      setLastLoyaltySpin(result);
+      setFreeSpinsLeft(result.spinsLeft ?? 0);
+      setLoyaltyProfile(result.profile ?? null);
+      lastSpinGrantedRef.current = true;
+      pendingFreeSpinSourceRef.current = "nft";
+
+      iframe.contentWindow.postMessage(
+        {
+          type: "FREE_SPIN_AVAILABLE_NFT",
+          roll: result.roll,
+          resultCode: result.resultCode,
+          spinId: result.spinId,
+        },
+        "*",
+      );
+    } catch (error) {
+      console.error("[loyalty] spin start failed:", error);
+      toast.error("Unable to start NFT Free Spin.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUseHighBalanceSpin = () => {
@@ -864,11 +979,72 @@ function GameContainer() {
     }
   };
 
+  const processStakingBoostForDigest = async (digest, actionLabel) => {
+    if (!digest) {
+      const result = {
+        status: "warning",
+        action: actionLabel,
+        message: "Staking transaction completed, but no digest was returned for XP boost verification.",
+      };
+      setLastStakingBoostResult(result);
+      return result;
+    }
+
+    try {
+      const boostRes = await fetch(`${BACKEND_URL}/staking-boost/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: account.address, digest }),
+      });
+      const boostData = await boostRes.json();
+
+      if (!boostRes.ok) {
+        const result = {
+          status: "warning",
+          action: actionLabel,
+          digest,
+          message: boostData.message || "XP boost could not be processed.",
+        };
+        setLastStakingBoostResult(result);
+        return result;
+      }
+
+      const result = {
+        status: "success",
+        action: actionLabel,
+        digest,
+        alreadyProcessed: Boolean(boostData.alreadyProcessed),
+        boostPercent: Number(boostData.boostPercent || 0),
+        baseRewardFlow: Number(boostData.baseRewardFlow || 0),
+        bonusFlow: Number(boostData.bonusFlow || 0),
+        finalRewardFlow: Number(
+          boostData.finalRewardFlow ??
+          (Number(boostData.baseRewardFlow || 0) + Number(boostData.bonusFlow || 0))
+        ),
+        bonusTx: boostData.bonusTx || null,
+        message: boostData.message || null,
+      };
+      setLastStakingBoostResult(result);
+      return result;
+    } catch (boostError) {
+      console.warn("[staking-boost] unable to process bonus", boostError);
+      const result = {
+        status: "warning",
+        action: actionLabel,
+        digest,
+        message: boostError?.message || "Unable to contact XP boost service.",
+      };
+      setLastStakingBoostResult(result);
+      return result;
+    }
+  };
+
   const handleClaimRewards = async () => {
     if (!connected || !account?.address) return toast.error("Connect to the wallet.");
     if (!stakingPosition?.id) return toast.error("No staking position to claim.");
 
     setStakingLoading(true);
+    setLastStakingBoostResult(null);
     try {
       const tx = new Transaction();
       tx.setSender(account.address);
@@ -880,12 +1056,24 @@ function GameContainer() {
       });
       tx.transferObjects([reward], account.address);
 
-      await executeTransactionWithWallet(tx);
-      toast.success("Rewards claimed.");
+      const executed = await executeTransactionWithWallet(tx);
+      const claimDigest = executed?.Transaction?.digest || executed?.digest || null;
+      const boostResult = await processStakingBoostForDigest(claimDigest, "Claim");
+
+      if (boostResult?.status === "success") {
+        const bonusText = boostResult.bonusFlow > 0
+          ? ` + ${formatFlowAmount(boostResult.bonusFlow, 6)} FLOW XP boost`
+          : "";
+        toast.success(`Rewards claimed.${bonusText}`);
+      } else {
+        toast.warning(`Rewards claimed on-chain. ${boostResult?.message || "XP boost requires review."}`);
+      }
+
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
       await fetchStakingFreeSpins();
+      await fetchFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
@@ -902,6 +1090,7 @@ function GameContainer() {
     if (isStakingUnlockLocked) return toast.error("This staking position is still locked.");
 
     setStakingLoading(true);
+    setLastStakingBoostResult(null);
     try {
       const tx = new Transaction();
       tx.setSender(account.address);
@@ -913,12 +1102,24 @@ function GameContainer() {
       });
       tx.transferObjects([principal, reward], account.address);
 
-      await executeTransactionWithWallet(tx);
-      toast.success("Unstake completed.");
+      const executed = await executeTransactionWithWallet(tx);
+      const unstakeDigest = executed?.Transaction?.digest || executed?.digest || null;
+      const boostResult = await processStakingBoostForDigest(unstakeDigest, "Unstake");
+
+      if (boostResult?.status === "success") {
+        const bonusText = boostResult.bonusFlow > 0
+          ? ` + ${formatFlowAmount(boostResult.bonusFlow, 6)} FLOW XP boost`
+          : "";
+        toast.success(`Unstake completed.${bonusText}`);
+      } else {
+        toast.warning(`Unstake completed on-chain. ${boostResult?.message || "XP boost requires review."}`);
+      }
+
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
       await fetchStakingFreeSpins();
+      await fetchFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
@@ -1036,11 +1237,11 @@ function GameContainer() {
   const [showInfoModal, setShowInfoModal] = useState(false);
 
   const simboliVincita = [
-    { src: "/slot/images/Glass.png", payout: " 5000 $FLOW" },
-    { src: "/slot/images/Moon.png", payout: " 10000 $FLOW" },
-    { src: "/slot/images/Bag.png", payout: " 20000 $FLOW" },
-    { src: "/slot/images/Flow1.png", payout: " 30000 $FLOW" },
-    { src: "/slot/images/jolly1.png", payout: "👑 100000 $FLOW" },	
+    { src: "/slot/images/Glass.png", payout: " +10 Total XP" },
+    { src: "/slot/images/Moon.png", payout: " +20 Total XP" },
+    { src: "/slot/images/Bag.png", payout: " +40 Total XP" },
+    { src: "/slot/images/Flow1.png", payout: " +60 Total XP" },
+    { src: "/slot/images/jolly1.png", payout: "👑 +200 Total XP" },
   ];
 
   useEffect(() => {
@@ -1101,85 +1302,59 @@ function GameContainer() {
       if (!data || !data.type) return;
 	  
       console.log("📩 Messaggio ricevuto da iframe:", data);
+
+      if (data.type === "SLOT_READY") {
+        setSlotReady(true);
+        console.info("Slot ready for backend-authorized NFT spins.");
+        return;
+      }
 	  
-	  if (data.type === "SPIN_REQUEST") {
-	    try {
-			  const latestRes = await fetch(`${BACKEND_URL}/balance?wallet=${account.address}`);
-		  const latestData = await latestRes.json();
-		  const latestBalance = latestData.balance ?? 0;
-          const SPIN_COST = 10000;
-		  if (latestBalance < SPIN_COST) {
-		    toast.error("Invalid spin due to insufficient balance.");
-		    await loadSlotBalance(account.address);
-		    return;
-		  }
+      if (data.type === "SPIN_REQUEST") {
+        // Legacy frame request: ignore silently. NFT spins are started only
+        // through handleLoyaltySpin after backend authorization.
+        console.info("Legacy frame spin ignored in NFT/XP mode.");
+        return;
+      }
 
-			  const res = await fetch(`${BACKEND_URL}/balance/spin`, {
-		    method: "POST",
-		    headers: { "Content-Type": "application/json" },
-		    body: JSON.stringify({ wallet: account.address, cost: SPIN_COST }),
-		  });
+      if (data.type === "SPIN_WIN") {
+        if (!lastSpinGrantedRef.current || !pendingLoyaltySpinRef.current) {
+          console.warn("SPIN_WIN received without an authorized NFT loyalty spin. Ignored.");
+          return;
+        }
 
-		  let data;
-		  try {
-		    data = await res.json(); // parsing protetto
-		  } catch (parseErr) {
-		    console.error("❌ Errore parsing JSON:", parseErr);
-		    toast.error("Invalid response from the server");
-		    await loadSlotBalance(account.address);
-		    return;
-		  }
+        lastSpinGrantedRef.current = false;
+        const reward = pendingLoyaltySpinRef.current;
+        pendingLoyaltySpinRef.current = null;
 
-		  if (!res.ok) {
-		    toast.error(`Spin denied: ${data.message || "Unknown error"}`);
-		    await loadSlotBalance(account.address);
-		    return;
-		}
-
-		  setSlotBalance(data.newBalance);
-		  postBalanceToGame(data.newBalance);
-		  console.log("✅ SPIN_GRANTED autorizzato");
-		  event.source?.postMessage({ type: "SPIN_GRANTED", newBalance: data.newBalance }, "*");
-		  lastSpinGrantedRef.current = true;
-
-	    } catch (err) {
-		  console.error("❌ ERRORE INTERNO DURANTE SPIN:", err?.message || err, err);
-		  toast.error("Unexpected error during spin.");
-		  await loadSlotBalance(account.address);
-		  return;
-	    }
-	  }
-
-	  if (data.type === "SPIN_WIN") {
-	    if (!lastSpinGrantedRef.current) {
-		  console.warn("⚠️ SPIN_WIN ricevuto senza autorizzazione. Ignorato.");
-		  return;
-	    }
-	    lastSpinGrantedRef.current = false;	  
-	    const amount = Number(data.amount || 0);
-	    if (amount > 0) {
-	      if (!isMuted) {
+        if (reward.bonusXp > 0) {
+          if (!isMuted) {
             const winAudio = new Audio("/slot/win-sound.wav");
             winAudio.volume = 0.45;
-		    winAudio.play().catch(() => {});
+            winAudio.play().catch(() => {});
           }
+          setFlashWin(true);
+          setGlowWin(true);
+          setTimeout(() => setFlashWin(false), 1000);
+          setTimeout(() => setGlowWin(false), 2000);
+        }
 
-	  	  setFlashWin(true);
-		  setGlowWin(true);
+        setLastLoyaltySpin(reward);
+        setLoyaltyProfile(reward.profile ?? null);
+        setSpinLog((prev) => [
+          ...prev,
+          `${reward.resultCode?.toUpperCase?.() || "SPIN"}: +${reward.loyaltyXp} Loyalty XP +${reward.bonusXp} Bonus XP = +${reward.spinTotalXp} Total XP`,
+        ]);
 
-		  setTimeout(() => {
-		    setFlashWin(false);
-		  }, 1000);
+        if (reward.tierUnlocked && reward.profile?.activeStakingBoost > 0) {
+          toast.success(
+            `${String(reward.profile.currentTier || "").replaceAll("_", " ").toUpperCase()} unlocked · +${reward.profile.activeStakingBoost}% Staking Reward Boost`,
+          );
+        } else {
+          toast.success(`+${reward.spinTotalXp} XP`);
+        }
 
-		  setTimeout(() => {
-		    setGlowWin(false);
-		  }, 2000);
-		  setSpinLog((prev) => [...prev, `✅ Win: +${amount} $FLOW`]);
-		  await updateSlotBalance(account.address, amount);
-	    } else {
-		  setSpinLog((prev) => [...prev, `❌ No Win`]);
-	    }
-	  }
+        await fetchFreeSpins();
+      }
 
 
 	  if (data.type === "REQUEST_BALANCE") {
@@ -1190,36 +1365,12 @@ function GameContainer() {
 	  
       console.log("✅ React ha ricevuto FREE_SPIN_USED, sto aggiornando Supabase");
 
-	  if (data.type === "FREE_SPIN_USED_NFT") {  
-	    try {
-          const isStakingSpin = pendingFreeSpinSourceRef.current === "staking";
-			  const res = await fetch(`${BACKEND_URL}${isStakingSpin ? "/staking-free-spin" : "/free-spin"}`, {
-		    method: "POST",
-		    headers: { "Content-Type": "application/json" },
-		    body: JSON.stringify({ wallet: account.address }),
-		  });
-
-		  const result = await res.json();
-		  if (res.ok) {
-            if (isStakingSpin) {
-		      setStakingSpinsLeft(result.spinsLeft ?? 0);
-              const nextAvailablePlan = Array.isArray(result.eligiblePlans)
-                ? result.eligiblePlans.find((plan) => plan.available && plan.plan === "Whale") ||
-                  result.eligiblePlans.find((plan) => plan.available)
-                : null;
-              setStakingSpinPlan(result.spinsLeft > 0 ? nextAvailablePlan?.plan || "" : "");
-            } else {
-		      setFreeSpinsLeft(result.spinsLeft ?? 0);
-            }
-		  } else {
-		    toast.error(result.message || (isStakingSpin ? "Error using staking spin" : "Error using NFT spin"));
-		  }
-          pendingFreeSpinSourceRef.current = "nft";
-	    } catch (err) {
-		  console.error("Error recording free spin:", err);
-          pendingFreeSpinSourceRef.current = "nft";
-	    }
-	  }
+      if (data.type === "FREE_SPIN_USED_NFT") {
+        // The spin is already consumed atomically by /loyalty/spin before animation starts.
+        // Keep this legacy GDevelop message only as a UI refresh hook.
+        pendingFreeSpinSourceRef.current = "nft";
+        await fetchFreeSpins();
+      }
 
 	  if (data.type === "FREE_SPIN_USED_BAL") {  
 	    try {
@@ -1261,6 +1412,7 @@ function GameContainer() {
         fetchStakingPoolStats();
         fetchStakingPosition();
         fetchStakingFreeSpins();
+        fetchFreeSpins();
       }
     };
 
@@ -1269,6 +1421,7 @@ function GameContainer() {
       fetchStakingPoolStats();
       fetchStakingPosition();
       fetchStakingFreeSpins();
+      fetchFreeSpins();
     };
 
     document.addEventListener("visibilitychange", handleVisibilityRefresh);
@@ -1302,12 +1455,12 @@ function GameContainer() {
       <div className="left-panel">
         <WalletActionShortcuts currentPage="slot" />
         {connected ? (
-          <button className="btn" onClick={handleDisconnect}>
+          <button className="btn panel-wallet-button" onClick={handleDisconnect}>
             Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
           </button>
         ) : (
           <button
-            className="btn"
+            className="btn panel-wallet-button"
             type="button"
             onClick={() => {
               if (wallets.length === 0) {
@@ -1332,107 +1485,85 @@ function GameContainer() {
         </button>
         {canShowWalletPanel ? (
           <>
-            <div className={`wallet-box ${flashWin ? "flash-win" : ""}`}>
+            <div className={`wallet-box loyalty-wallet-box ${flashWin ? "flash-win" : ""}`}>
               <p><strong>Wallet:</strong><br />{account.address.slice(0, 6)}...{account.address.slice(-4)}</p>
               <p className="wallet-balance-line"><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
-              <p className="slot-balance-line"><span className="wallet-line-icon" aria-hidden="true">🎰</span><strong> FLOW Slot:</strong> {slotBalance}</p>
-              {balanceError ? <p className="wallet-warning">{balanceError}</p> : null}
-              {freeSpinsLeft > 0 && (
-				<button
-				  className="btn btn-free-spin glow-effect"
-				  onClick={async () => {
-					console.log("🟢 Click Free Spin");
-					const ok = await checkBackendBalanceOk();
-					if (!ok) {
-					  toast.error("Reward wallet empty. Please wait for refill.");
-					  return;
-					}
-                    lastSpinGrantedRef.current = true;; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO					
-                    pendingFreeSpinSourceRef.current = "nft";
-					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
-				  }}
-				>
-				  🎁 NFT Spin Available ({freeSpinsLeft})
-				</button>
-              )}
-              {stakingSpinsLeft > 0 && (
-				<button
-				  className="btn btn-free-spin btn-staking-spin glow-effect"
-				  onClick={async () => {
-					const ok = await checkBackendBalanceOk();
-					if (!ok) {
-					  toast.error("Reward wallet empty. Please wait for refill.");
-					  return;
-					}
-                    const res = await fetch(`${BACKEND_URL}/staking-free-spin?wallet=${account.address}`);
-                    const data = await res.json();
-                    if (!res.ok || !data.spinsLeft) {
-					  toast.error(data.message || "Staking spin already used");
-					  setStakingSpinsLeft(0);
-					  return;
-                    }
-                    lastSpinGrantedRef.current = true;
-                    pendingFreeSpinSourceRef.current = "staking";
-					document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_NFT" }, "*");
-				  }}
-				>
-				  {stakingSpinButtonText}
-				</button>
-              )}
-			  
+              <div className="loyalty-summary-card">
+                <div className="loyalty-summary-row">
+                  <span>Total XP</span>
+                  <strong>{loyaltyProfile?.totalXp ?? 0}</strong>
+                </div>
+                <div className="loyalty-summary-row">
+                  <span>Loyalty XP</span>
+                  <strong>{loyaltyProfile?.loyaltyXp ?? 0}</strong>
+                </div>
+                <div className="loyalty-summary-row">
+                  <span>Bonus XP</span>
+                  <strong>{loyaltyProfile?.bonusXp ?? 0}</strong>
+                </div>
+                <div className="loyalty-summary-row">
+                  <span>Tier</span>
+                  <strong>{String(loyaltyProfile?.currentTier || "starter").replaceAll("_", " ").toUpperCase()}</strong>
+                </div>
+                <div className="loyalty-summary-row">
+                  <span>Staking Reward Boost</span>
+                  <strong>
+                    {loyaltyProfile?.activeStakingBoost > 0
+                      ? `+${loyaltyProfile.activeStakingBoost}%`
+                      : "None"}
+                  </strong>
+                </div>
+                {loyaltyProfile?.boostExpiresAt && loyaltyProfile?.activeStakingBoost > 0 ? (
+                  <small className="loyalty-boost-expiry">
+                    Active until {new Date(loyaltyProfile.boostExpiresAt).toLocaleString()}
+                  </small>
+                ) : null}
+              </div>
+
+              {lastLoyaltySpin ? (
+                <div className="loyalty-last-spin">
+                  <strong>{String(lastLoyaltySpin.resultCode || "spin").replaceAll("_", " ").toUpperCase()}</strong>
+                  <span>
+                    +{lastLoyaltySpin.loyaltyXp} Loyalty XP · +{lastLoyaltySpin.bonusXp} Bonus XP ·
+                    {" "}+{lastLoyaltySpin.spinTotalXp} Total XP
+                  </span>
+                </div>
+              ) : null}
+
+              {freeSpinsLeft === 0 && loyaltyDiagnostics ? (
+                <div className="loyalty-diagnostics">
+                  <strong>Preview NFT diagnostics</strong>
+                  {"error" in loyaltyDiagnostics ? (
+                    <span>{loyaltyDiagnostics.error}</span>
+                  ) : (
+                    <>
+                      <span>Wallet objects seen: {loyaltyDiagnostics.ownedObjectCount ?? 0}</span>
+                      <span>Whitelist matches: {loyaltyDiagnostics.whitelistMatches?.length ?? 0}</span>
+                      <span>Rarity matches: {loyaltyDiagnostics.rarityMatches?.length ?? 0}</span>
+                      <span>Eligible NFTs: {loyaltyDiagnostics.eligibleMatches?.length ?? 0}</span>
+                    </>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="loyalty-action-stack">
+                <button
+                  className="btn btn-free-spin glow-effect"
+                  onClick={handleLoyaltySpin}
+                  disabled={loading || freeSpinsLeft <= 0 || !slotReady}
+                >
+                  🎁 NFT Free Spin ({freeSpinsLeft})
+                </button>
+
+                {!slotReady ? (
+                  <small className="slot-ready-hint">Press Play in the slot frame before using a Free Spin.</small>
+                ) : null}
+
+                <button className="btn btn-log" onClick={() => setShowLogModal(true)}>
+                  📜 XP Logs
+                </button>
+              </div>
             </div>
-            <div className="controls">
-              <button onClick={() => setDepositMultiplier((p) => Math.max(1, p - 1))} className="btn">➖</button>
-              <span className="amount-display">{depositMultiplier * 10000} $FLOW</span>
-              <button onClick={() => setDepositMultiplier((p) => p + 1)} className="btn">➕</button>
-            </div>
-			
-            <button onClick={handleDeposit} className="btn btn-deposit" disabled={loading}>💸 Top Up </button>
-            <button onClick={handleWithdraw} className="btn btn-withdraw" disabled={loading}>💰 Withdraw</button>
-			<div style={{ display: "flex", gap: "2rem", width: "100%", justifyContent: "center" }}>
-			  <button className="btn btn-log" onClick={() => setShowLogModal(true)}>
-				📜 View Logs
-			  </button>			  
-			  {highBalanceCanSpin && (
-			    <div className="tooltip-container">
-				  <button
-				    className="btn btn-free-spin btn-highspin glow-effect"
-				    onClick={async () => {	
-					  const ok = await checkBackendBalanceOk();
-					  if (!ok) {
-					    toast.error("Reward wallet empty. Please wait for refill.");
-					    return;
-					  }
-
-					  // Verifica lato backend se può ancora spinare
-					  try {
-					    const res = await fetch(`${BACKEND_URL}/high-balance-spin?wallet=${account.address}`);
-					    const data = await res.json();
-
-					    if (!res.ok || !data.canSpin) {
-						  toast.error("Spin already used today");
-						  setHighBalanceCanSpin(false); // Nascondi il pulsante
-						  return;
-					    }
-
-					    lastSpinGrantedRef.current = true; // ✅ AUTORIZZA PRIMA DEL MESSAGGIO
-					    console.log("🎰 Inviato FREE_SPIN_AVAILABLE_BAL");					  
-					    document.querySelector("iframe")?.contentWindow?.postMessage({ type: "FREE_SPIN_AVAILABLE_BAL" }, "*");
-
-					  } catch (err) {
-					    console.error("Errore durante il check dello spin:", err);
-					    toast.error("Errore durante la verifica dello spin");
-					  }
-				    }}
-				  >
-				    🐳
-				  </button>
-
-				  <span className="tooltip-text">Whale FREE spin</span>
-			    </div>
-			  )}
-
-			</div>
           </>
         ) : (
           <div className="wallet-warning">❌ Unauthorized wallet</div>
@@ -1454,6 +1585,7 @@ function GameContainer() {
 		    className="game-frame"
 		    onLoad={() => {
 		  	  console.log("📥 iframe caricato");
+              setSlotReady(false);
 			  syncBalanceToGame(slotBalance ?? 0);
 		    }}
 		  />
@@ -1464,7 +1596,7 @@ function GameContainer() {
 	  {showInfoModal && (
 	    <div className="log-modal-backdrop" onClick={() => setShowInfoModal(false)}>
 		  <div className="log-modal" onClick={(e) => e.stopPropagation()}>
-		    <h2>🏆 Paytable </h2>
+		    <h2>🏆 XP Paytable</h2>
 		    <ul className="symbol-list">
 			  {simboliVincita.map((s, i) => (
 			    <li key={i} style={{ display: 'flex', alignItems: 'center', marginBottom: '1rem' }}>
@@ -1506,7 +1638,7 @@ function GameContainer() {
       {showLogModal && (
         <div className="log-modal-backdrop" onClick={() => setShowLogModal(false)}>
           <div className="log-modal" onClick={(e) => e.stopPropagation()}>
-            <h2>📋 Win Log</h2>
+            <h2>📋 XP Log</h2>
             <ul>
               {spinLog.length === 0 && <li>(No log available)</li>}
               {spinLog.map((entry, idx) => (
@@ -1546,12 +1678,51 @@ function GameContainer() {
       </div>
       <div className="staking-shell">
         <div className="staking-copy">
-          <p className="staking-kicker">Sui testnet staking</p>
-          <h2 id="staking-title">$FLOW Staking Vault</h2>
+          <p className="staking-kicker">NFT loyalty × Sui staking</p>
+          <h2 id="staking-title">$FLOW Loyalty Staking</h2>
           <p>
-            A staking layer for players who want to lock $FLOW, earn scheduled rewards and unlock
-            extra loyalty multipliers without mixing slot balance and staked funds.
+            Stake $FLOW as usual and let your NFT activity work on top of it. Total XP can unlock
+            temporary Staking Reward Boosts that increase the reward paid after a verified claim or unstake.
           </p>
+
+          <div className="staking-loyalty-card" aria-label="Loyalty staking status">
+            <div className="staking-loyalty-head">
+              <div>
+                <span>Your loyalty status</span>
+                <strong>{currentTierLabel}</strong>
+              </div>
+              <div className={`staking-boost-badge ${activeStakingBoost > 0 ? "active" : ""}`}>
+                {activeStakingBoost > 0 ? `+${activeStakingBoost}%` : "No boost"}
+              </div>
+            </div>
+
+            <div className="staking-loyalty-metrics">
+              <div>
+                <span>Total XP</span>
+                <strong>{currentTotalXp.toLocaleString()}</strong>
+              </div>
+              <div>
+                <span>Staking Reward Boost</span>
+                <strong>{activeStakingBoost > 0 ? `+${activeStakingBoost}%` : "None"}</strong>
+              </div>
+              <div>
+                <span>Boost remaining</span>
+                <strong>{boostRemainingLabel}</strong>
+              </div>
+            </div>
+
+            <div className="staking-tier-progress" aria-label="Progress to next loyalty tier">
+              <div className="staking-tier-progress-track">
+                <span style={{ width: `${nextTierProgress}%` }} />
+              </div>
+              <small>
+                {nextLoyaltyTier
+                  ? `${xpToNextTier.toLocaleString()} XP to ${nextLoyaltyTier.name} · +${nextLoyaltyTier.boost}% boost`
+                  : "Maximum loyalty tier reached"}
+              </small>
+            </div>
+          </div>
+
           <div className="staking-research">
             {STAKING_RESEARCH.map((item) => (
               <span key={item}>{item}</span>
@@ -1572,6 +1743,7 @@ function GameContainer() {
                 fetchBalances();
                 fetchStakingPoolStats();
                 fetchStakingPosition();
+                fetchFreeSpins();
               }}
             >
               Refresh
@@ -1620,9 +1792,10 @@ function GameContainer() {
                 {activePoolStats ? `${formatFlowAmount(activePoolStats.rewardBalance, 2)} FLOW` : "--"}
               </strong>
             </div>
-            <div>
-              <span>APY</span>
-              <strong>Manual claim</strong>
+            <div className={activeStakingBoost > 0 ? "boosted" : ""}>
+              <span>XP boost</span>
+              <strong>{activeStakingBoost > 0 ? `+${activeStakingBoost}% active` : "Not active"}</strong>
+              <small>{activeStakingBoost > 0 ? boostRemainingLabel : "Earn Total XP in the slot"}</small>
             </div>
           </div>
 
@@ -1642,40 +1815,95 @@ function GameContainer() {
             <button type="button" onClick={() => setStakingAmount((value) => value + 10000)}>+</button>
           </div>
 
-          <div className="staking-summary">
-            <span>Lock</span>
-            <strong>{activeStakingPlan.duration}</strong>
-            <span>{activePoolStats?.totalStaked ? "Live APR" : "APR after stake"}</span>
-            <strong>
-              {activePoolStats?.totalStaked
-                ? formatApr(activePoolStats.estimatedApr)
-                : formatApr(projectedStakeApr)}
-            </strong>
-            <span>Reward weight</span>
-            <strong>{getRewardWeightLabel(activeStakingPlan.name)}</strong>
-            <span>Total staked</span>
-            <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
-            <span>Staked</span>
-            <strong>{stakingPosition ? `${stakingPosition.amount} $FLOW` : "--"}</strong>
-            <span>Claimable</span>
-            <strong>{pendingStakeRewards !== null ? `${formatFlowAmount(pendingStakeRewards, 4)} $FLOW` : "--"}</strong>
-            <span>Unlock</span>
-            <strong>
-              {stakingPosition?.unlockTime && !isFlexibleStakingPlan
-                ? new Date(stakingPosition.unlockTime * 1000).toLocaleDateString()
-                : "--"}
-            </strong>
+          <div className="staking-position-card">
+            <div className="staking-position-head">
+              <div>
+                <span>Position</span>
+                <strong>{activeStakingPlan.name}</strong>
+              </div>
+              <small>{stakingPosition ? "Active position" : "No active position"}</small>
+            </div>
+
+            <div className="staking-position-meta">
+              <div>
+                <span>Lock</span>
+                <strong>{activeStakingPlan.duration}</strong>
+              </div>
+              <div>
+                <span>Reward weight</span>
+                <strong>{getRewardWeightLabel(activeStakingPlan.name)}</strong>
+              </div>
+              <div>
+                <span>Total staked</span>
+                <strong>{activePoolStats ? `${formatFlowAmount(activePoolStats.totalStaked, 2)} FLOW` : "--"}</strong>
+              </div>
+              <div>
+                <span>Your stake</span>
+                <strong>{stakingPosition ? `${stakingPosition.amount} FLOW` : "--"}</strong>
+              </div>
+              <div>
+                <span>Unlock</span>
+                <strong>
+                  {stakingPosition?.unlockTime && !isFlexibleStakingPlan
+                    ? new Date(stakingPosition.unlockTime * 1000).toLocaleDateString()
+                    : isFlexibleStakingPlan && stakingPosition ? "Any time" : "--"}
+                </strong>
+              </div>
+            </div>
+
+            <div className="staking-reward-breakdown" aria-label="Staking reward preview">
+              <div>
+                <span>Base reward</span>
+                <strong>{pendingStakeRewards !== null ? `${formatFlowAmount(pendingStakeRewards, 6)} FLOW` : "--"}</strong>
+              </div>
+              <div className={activeStakingBoost > 0 ? "reward-boost-row active" : "reward-boost-row"}>
+                <span>XP boost {activeStakingBoost > 0 ? `(+${activeStakingBoost}%)` : ""}</span>
+                <strong>{pendingBoostReward !== null ? `+${formatFlowAmount(pendingBoostReward, 6)} FLOW` : "--"}</strong>
+              </div>
+              <div className="staking-reward-total">
+                <span>Total claimable</span>
+                <strong>{pendingTotalReward !== null ? `${formatFlowAmount(pendingTotalReward, 6)} FLOW` : "--"}</strong>
+              </div>
+              <small>
+                The XP bonus is paid separately only after the backend verifies the successful on-chain staking reward transaction.
+              </small>
+            </div>
           </div>
+
+          {lastStakingBoostResult ? (
+            <div className={`staking-boost-result ${lastStakingBoostResult.status}`}>
+              <div>
+                <span>Last {lastStakingBoostResult.action || "staking"} result</span>
+                <strong>
+                  {lastStakingBoostResult.status === "success"
+                    ? lastStakingBoostResult.bonusFlow > 0
+                      ? `+${formatFlowAmount(lastStakingBoostResult.bonusFlow, 6)} FLOW boost paid`
+                      : "No boost due"
+                    : "Boost needs attention"}
+                </strong>
+              </div>
+              {lastStakingBoostResult.status === "success" ? (
+                <small>
+                  Base {formatFlowAmount(lastStakingBoostResult.baseRewardFlow, 6)} FLOW ·
+                  {" "}Boost {lastStakingBoostResult.boostPercent || 0}% ·
+                  {" "}Total {formatFlowAmount(lastStakingBoostResult.finalRewardFlow, 6)} FLOW
+                  {lastStakingBoostResult.alreadyProcessed ? " · already processed" : ""}
+                </small>
+              ) : (
+                <small>{lastStakingBoostResult.message}</small>
+              )}
+            </div>
+          ) : null}
 
           <p className="staking-pool-note">{stakingPoolStatus}</p>
           <p className={`staking-status ${isStakingConfigured ? "ready" : ""}`}>{stakingStatus}</p>
 
           <div className="staking-actions">
             <button type="button" onClick={handleStake} disabled={stakingLoading || !isStakingConfigured}>
-              Stake
+              {stakingLoading ? "Working..." : "Stake"}
             </button>
             <button type="button" onClick={handleClaimRewards} disabled={stakingLoading || !stakingPosition}>
-              Claim
+              Claim rewards
             </button>
             <button type="button" onClick={handleUnstake} disabled={stakingLoading || !stakingPosition || isStakingUnlockLocked}>
               Unstake
