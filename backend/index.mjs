@@ -4,6 +4,8 @@ import { withdraw, checkBackendBalance } from "./withdraw.mjs";
 import { getFreeSpin, useFreeSpin } from "./freespin.mjs";
 import { getHighBalanceSpin, useHighBalanceSpin } from "./highbalancespin.mjs";
 import { getStakingFreeSpin, useStakingFreeSpin } from "./stakingfreespin.mjs";
+import { getLoyaltyStatus, startLoyaltySpin } from "./loyalty.mjs";
+import { getStakingBoost, claimStakingBoost } from "./stakingboost.mjs";
 import balanceRoutes from "./balance.mjs";
 const app = express();
 
@@ -25,6 +27,14 @@ app.post("/high-balance-spin", useHighBalanceSpin);
 // Free spin da staking Loyal / Whale
 app.get("/staking-free-spin", getStakingFreeSpin);
 app.post("/staking-free-spin", useStakingFreeSpin);
+
+// NFT loyalty XP system (new economy)
+app.get("/loyalty/status", getLoyaltyStatus);
+app.post("/loyalty/spin", startLoyaltySpin);
+
+// Staking reward boost based on Total XP
+app.get("/staking-boost", getStakingBoost);
+app.post("/staking-boost/claim", claimStakingBoost);
 
 app.listen(3000, () => {
   console.log("🚀 Backend in ascolto su http://localhost:3000");
