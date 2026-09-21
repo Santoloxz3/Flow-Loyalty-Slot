@@ -19,6 +19,34 @@ try {
 
 const normalize = (value) => String(value || "").toLowerCase();
 
+const STAKING_POOL_IDS = Object.freeze([
+  "0xb914f28e385b0d193c13e9cb9d6621466a209fd98376098aff97bc799b0bd234",
+  "0x0aac4a32e17c57b45b83f1aa4c4ea8014e3601d63258c4e40ec7257e7c8a20f4",
+  "0xd2a17cf5c2554e8d16d19c6a0f3720fbc13663aefedcb528422c1b9dc675d40d",
+]);
+
+let stakingIdentityPromise = null;
+
+async function getStakingIdentity() {
+  if (!stakingIdentityPromise) {
+    stakingIdentityPromise = Promise.all(
+      STAKING_POOL_IDS.map(async (poolId) => {
+        const { object } = await client.getObject({ objectId: poolId });
+        const objectType = String(object?.type || "");
+        const packageId = normalize(objectType.split("::")[0]);
+        if (!packageId || !objectType.includes("::flow_staking::StakingPool")) {
+          throw new Error(`Unexpected staking pool type for ${poolId}`);
+        }
+        return { poolId: normalize(poolId), packageId };
+      }),
+    ).then((rows) => ({
+      poolIds: new Set(rows.map((row) => row.poolId)),
+      packageIds: new Set(rows.map((row) => row.packageId)),
+    }));
+  }
+  return stakingIdentityPromise;
+}
+
 async function getProfile(wallet) {
   const { data, error } = await supabase.rpc("loyalty_profile_snapshot", { p_wallet: wallet });
   if (error) throw error;
@@ -45,14 +73,18 @@ function getTransactionSender(tx) {
   return tx?.transaction?.sender || tx?.sender || tx?.effects?.sender || null;
 }
 
-function findRewardEvent(tx, wallet) {
+function findRewardEvent(tx, wallet, stakingIdentity) {
   const events = tx?.events || [];
   for (const event of events) {
     const eventType = String(event?.eventType || event?.type || "");
     const json = event?.json || event?.parsedJson || {};
     const eventUser = normalize(json?.user);
+    const eventPackageId = normalize(eventType.split("::")[0]);
+    const eventPoolId = normalize(json?.pool_id || json?.poolId);
 
     if (eventUser !== normalize(wallet)) continue;
+    if (!stakingIdentity.packageIds.has(eventPackageId)) continue;
+    if (!stakingIdentity.poolIds.has(eventPoolId)) continue;
 
     if (eventType.endsWith("::flow_staking::RewardClaimed")) {
       return {
@@ -171,7 +203,8 @@ export async function claimStakingBoost(req, res) {
       return res.status(403).json({ message: "Staking claim sender does not match wallet" });
     }
 
-    const rewardEvent = findRewardEvent(tx, wallet);
+    const stakingIdentity = await getStakingIdentity();
+    const rewardEvent = findRewardEvent(tx, wallet, stakingIdentity);
     if (!rewardEvent || rewardEvent.amountNanos <= 0n) {
       return res.status(400).json({ message: "No eligible staking reward event found in this transaction" });
     }
