@@ -154,9 +154,23 @@ Approach:
 - backend verifies real Sui staking reward transaction/event;
 - only known staking pools/packages accepted;
 - active XP boost applied as a separate supplementary FLOW payout;
-- `staking_boost_claims` used for duplicate protection.
+- `staking_boost_claims` used for duplicate protection;
+- every verified staking reward digest is now recorded even when boost is 0%, preventing replay after a later tier unlock;
+- failed boost payouts fail closed and require review instead of automatic retry, reducing double-payment risk;
+- payout transaction digest is retained when available for recovery analysis.
 
-This path still needs thorough runtime testing before production.
+Current preview UI now includes:
+
+- Loyalty Tier and Total XP;
+- active Staking Reward Boost and remaining time;
+- progress to next tier;
+- base claimable reward;
+- projected XP boost bonus;
+- projected total claimable reward;
+- last claim/unstake boost result;
+- clearer warning when the on-chain claim succeeds but the separate XP boost cannot be completed.
+
+Frontend build passes. Real wallet runtime testing of the boost payout is still required before production.
 
 ## Known items still to validate/fix
 
@@ -192,18 +206,16 @@ Current focus/visibility handlers should be reviewed to ensure `fetchFreeSpins()
 
 ### 4. Staking boost runtime
 
-Still validate:
+Still validate with a real testnet staking position:
 
-- transaction digest returned correctly from wallet execution;
-- claim event parsing against current Sui client response shape;
+- transaction digest returned correctly from each supported wallet execution path;
+- RewardClaimed / Unstaked event parsing against the current Sui client response shape;
 - supplementary bonus payout;
 - duplicate claim behavior;
 - insufficient payout-wallet balance behavior;
-- failed claim retry behavior.
+- failed-payout manual-review behavior.
 
-Known implementation concern to review:
-
-A `failed` row in `staking_boost_claims` may need a safe retry transition instead of attempting a duplicate insert.
+The previous duplicate-insert retry issue has been removed: failed rows now fail closed instead of being automatically retried.
 
 ### 5. Legacy cleanup
 
