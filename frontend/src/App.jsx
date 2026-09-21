@@ -936,12 +936,35 @@ function GameContainer() {
       });
       tx.transferObjects([reward], account.address);
 
-      await executeTransactionWithWallet(tx);
-      toast.success("Rewards claimed.");
+      const executed = await executeTransactionWithWallet(tx);
+      const claimDigest = executed?.Transaction?.digest || executed?.digest || null;
+
+      let boostMessage = "";
+      if (claimDigest) {
+        try {
+          const boostRes = await fetch(`${BACKEND_URL}/staking-boost/claim`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet: account.address, digest: claimDigest }),
+          });
+          const boostData = await boostRes.json();
+
+          if (boostRes.ok && Number(boostData.bonusFlow || 0) > 0) {
+            boostMessage = ` + ${formatFlowAmount(Number(boostData.bonusFlow), 6)} FLOW XP boost`;
+          } else if (!boostRes.ok) {
+            console.warn("[staking-boost] bonus processing failed", boostData);
+          }
+        } catch (boostError) {
+          console.warn("[staking-boost] unable to process bonus", boostError);
+        }
+      }
+
+      toast.success(`Rewards claimed.${boostMessage}`);
       await fetchBalances({ silent: true });
       await fetchStakingPoolStats();
       await fetchStakingPosition();
       await fetchStakingFreeSpins();
+      await fetchFreeSpins();
       scheduleBalanceRefresh();
       scheduleStakingRefresh();
     } catch (error) {
