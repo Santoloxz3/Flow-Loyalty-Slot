@@ -145,11 +145,14 @@ async function payBonus(wallet, amountNanos) {
   });
 
   const envelope = getTransactionEnvelope(result);
+  const digest = envelope?.digest || result?.digest || null;
   if (!envelope || envelope.status?.success === false || result?.FailedTransaction) {
-    throw new Error(envelope?.status?.error?.message || "Staking boost transaction failed");
+    const payoutError = new Error(envelope?.status?.error?.message || "Staking boost transaction failed");
+    payoutError.transactionDigest = digest;
+    throw payoutError;
   }
 
-  return envelope.digest;
+  return digest;
 }
 
 export async function getStakingBoost(req, res) {
@@ -176,15 +179,25 @@ export async function claimStakingBoost(req, res) {
   try {
     const existing = await loadClaim(digest);
     if (existing?.status === "success") {
+      const baseRewardFlow = Number(existing.base_reward_nanos || 0) / 1e9;
+      const bonusFlow = Number(existing.bonus_reward_nanos || 0) / 1e9;
       return res.json({
         alreadyProcessed: true,
         boostPercent: Number(existing.boost_percent || 0),
-        bonusFlow: Number(existing.bonus_reward_nanos || 0) / 1e9,
+        baseRewardFlow,
+        bonusFlow,
+        finalRewardFlow: baseRewardFlow + bonusFlow,
         bonusTx: existing.bonus_tx_hash || null,
       });
     }
     if (existing?.status === "pending") {
       return res.status(409).json({ message: "This staking claim is already being processed" });
+    }
+    if (existing?.status === "failed") {
+      return res.status(409).json({
+        message: "Previous XP boost payout for this staking claim requires review before retry.",
+        manualReview: true,
+      });
     }
 
     await client.waitForTransaction({ digest, timeout: 30_000 });
@@ -210,18 +223,14 @@ export async function claimStakingBoost(req, res) {
     }
 
     const profile = await getProfile(wallet);
-    const boostPercent = Number(profile?.activeStakingBoost || 0);
-    if (boostPercent <= 0) {
-      return res.json({
-        boostPercent: 0,
-        baseRewardFlow: Number(rewardEvent.amountNanos) / 1e9,
-        bonusFlow: 0,
-        message: "No active Staking Reward Boost",
-      });
-    }
+    const boostPercent = Math.max(0, Number(profile?.activeStakingBoost || 0));
+    const bonusNanos = boostPercent > 0
+      ? (rewardEvent.amountNanos * BigInt(boostPercent)) / 100n
+      : 0n;
 
-    const bonusNanos = (rewardEvent.amountNanos * BigInt(boostPercent)) / 100n;
-
+    // Every verified staking reward digest is recorded, even when the wallet
+    // currently has no boost. This prevents replaying an old claim later
+    // after a higher loyalty tier has been unlocked.
     const row = {
       claim_digest: digest,
       wallet,
@@ -229,7 +238,7 @@ export async function claimStakingBoost(req, res) {
       base_reward_nanos: rewardEvent.amountNanos.toString(),
       boost_percent: boostPercent,
       bonus_reward_nanos: bonusNanos.toString(),
-      status: "pending",
+      status: bonusNanos > 0n ? "pending" : "success",
       updated_at: new Date().toISOString(),
     };
 
@@ -241,11 +250,21 @@ export async function claimStakingBoost(req, res) {
       if (insertError.code === "23505") {
         const concurrent = await loadClaim(digest);
         if (concurrent?.status === "success") {
+          const baseRewardFlow = Number(concurrent.base_reward_nanos || 0) / 1e9;
+          const bonusFlow = Number(concurrent.bonus_reward_nanos || 0) / 1e9;
           return res.json({
             alreadyProcessed: true,
             boostPercent: Number(concurrent.boost_percent || 0),
-            bonusFlow: Number(concurrent.bonus_reward_nanos || 0) / 1e9,
+            baseRewardFlow,
+            bonusFlow,
+            finalRewardFlow: baseRewardFlow + bonusFlow,
             bonusTx: concurrent.bonus_tx_hash || null,
+          });
+        }
+        if (concurrent?.status === "failed") {
+          return res.status(409).json({
+            message: "Previous XP boost payout for this staking claim requires review before retry.",
+            manualReview: true,
           });
         }
         return res.status(409).json({ message: "This staking claim is already being processed" });
@@ -253,8 +272,20 @@ export async function claimStakingBoost(req, res) {
       throw insertError;
     }
 
+    if (bonusNanos <= 0n) {
+      const baseRewardFlow = Number(rewardEvent.amountNanos) / 1e9;
+      return res.json({
+        boostPercent: 0,
+        baseRewardFlow,
+        bonusFlow: 0,
+        finalRewardFlow: baseRewardFlow,
+        message: "No active Staking Reward Boost",
+      });
+    }
+
+    let bonusTx = null;
     try {
-      const bonusTx = await payBonus(wallet, bonusNanos);
+      bonusTx = await payBonus(wallet, bonusNanos);
       const { error: updateError } = await supabase
         .from("staking_boost_claims")
         .update({
@@ -273,12 +304,16 @@ export async function claimStakingBoost(req, res) {
         bonusTx,
       });
     } catch (paymentError) {
+      const payoutDigest = paymentError?.transactionDigest || bonusTx || null;
+      const failureUpdate = {
+        status: "failed",
+        updated_at: new Date().toISOString(),
+      };
+      if (payoutDigest) failureUpdate.bonus_tx_hash = payoutDigest;
+
       await supabase
         .from("staking_boost_claims")
-        .update({
-          status: "failed",
-          updated_at: new Date().toISOString(),
-        })
+        .update(failureUpdate)
         .eq("claim_digest", digest);
       throw paymentError;
     }
