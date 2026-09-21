@@ -1372,12 +1372,12 @@ function GameContainer() {
       <div className="left-panel">
         <WalletActionShortcuts currentPage="slot" />
         {connected ? (
-          <button className="btn" onClick={handleDisconnect}>
+          <button className="btn panel-wallet-button" onClick={handleDisconnect}>
             Disconnect {currentWallet?.name ? `(${currentWallet.name})` : ""}
           </button>
         ) : (
           <button
-            className="btn"
+            className="btn panel-wallet-button"
             type="button"
             onClick={() => {
               if (wallets.length === 0) {
