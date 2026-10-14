@@ -18,7 +18,7 @@ FLOW GOD maintenance V2 implemented from XP head 9113588b418a9bad78e0ee125785c28
 - Protected env files, Move source and slot-legacy match the previous XP head. Rollback branches/documents retained.
 
 ## Deployment verification
-Release code is prepared for default main deployment. Remote deploy status must be recorded after push/promotion; a successful local build is not proof of remote deployment.
+PR #1 merged to main as 6826a27a1a093420aa11e53eb035f3fc21dd0f5e. Render deployment dep-db7s3alg1s2s73eiv0kg is LIVE from that commit (finished 2026-10-14 17:54:39 UTC). Public /health confirms loyalty-v2, testnet, 30 days and 1,000 Maintenance XP. Public loyalty status successfully returned V2 fields for the existing profile (Lifetime XP 400, maintenance 0); no test profile was created. Public legacy withdrawal returns 404 and unsigned spin returns 401. Netlify https://flowloyaltyslot.netlify.app/stake visibly serves the updated Lifetime XP and maintenance UI and reads live testnet pool statistics. Desktop and 390px mobile layout checked; no horizontal document overflow on mobile.
 
 ## Remaining practical limits
 Real connected-wallet NFT spin and supplementary staking payout require wallet execution and have not been claimed as verified in this session. Existing claim replay and failed-payout safeguards are retained.
