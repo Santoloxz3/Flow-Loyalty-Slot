@@ -1970,3 +1970,15 @@
     text-align: left;
   }
 }
+ .flow-god-maintenance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  margin-top: 12px;
+  border: 1px solid #7963c9;
+  border-radius: 12px;
+  color: #eee7ff;
+  overflow-wrap: anywhere;
+}
+.flow-god-maintenance progress { width: 100%; accent-color: #b496ff; }

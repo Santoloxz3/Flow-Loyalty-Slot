@@ -48,7 +48,7 @@ async function getStakingIdentity() {
 }
 
 async function getProfile(wallet) {
-  const { data, error } = await supabase.rpc("loyalty_profile_snapshot", { p_wallet: wallet });
+  const { data, error } = await supabase.rpc("loyalty_profile_snapshot_v2", { p_wallet: wallet });
   if (error) throw error;
   const row = data?.[0];
   if (!row) return null;
@@ -62,6 +62,15 @@ async function getProfile(wallet) {
     activeStakingBoost: Number(row.active_staking_boost || 0),
     boostStartedAt: row.boost_started_at || null,
     boostExpiresAt: row.boost_expires_at || null,
+    lifetimeXp: Number(row.total_xp || 0),
+    highestTier: Number(row.highest_tier_rank || 0) >= 5 ? "flow_god" : row.current_tier,
+    flowGodUnlockedAt: row.flow_god_unlocked_at || null,
+    flowGodActive: Boolean(row.flow_god_active),
+    maintenanceXp: Number(row.maintenance_xp || 0),
+    maintenanceRequiredXp: 1000,
+    maintenanceCycleDays: 30,
+    maintenanceStartedAt: row.maintenance_started_at || null,
+    maintenanceExpiresAt: row.maintenance_expires_at || null,
   };
 }
 

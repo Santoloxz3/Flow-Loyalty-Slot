@@ -187,7 +187,7 @@ async function getAvailability(wallet, eligibleNfts) {
 }
 
 async function getProfile(wallet) {
-  const { data, error } = await supabase.rpc("loyalty_profile_snapshot", { p_wallet: wallet });
+  const { data, error } = await supabase.rpc("loyalty_profile_snapshot_v2", { p_wallet: wallet });
   if (error) throw error;
   const profile = data?.[0] || null;
   if (!profile) return null;
@@ -202,6 +202,15 @@ async function getProfile(wallet) {
     activeStakingBoost: Number(profile.active_staking_boost || 0),
     boostStartedAt: profile.boost_started_at || null,
     boostExpiresAt: profile.boost_expires_at || null,
+    lifetimeXp: Number(profile.total_xp || 0),
+    highestTier: Number(profile.highest_tier_rank || 0) >= 5 ? "flow_god" : profile.current_tier,
+    flowGodUnlockedAt: profile.flow_god_unlocked_at || null,
+    flowGodActive: Boolean(profile.flow_god_active),
+    maintenanceXp: Number(profile.maintenance_xp || 0),
+    maintenanceRequiredXp: 1000,
+    maintenanceCycleDays: 30,
+    maintenanceStartedAt: profile.maintenance_started_at || null,
+    maintenanceExpiresAt: profile.maintenance_expires_at || null,
   };
 }
 
@@ -311,7 +320,7 @@ export async function startLoyaltySpin(req, res) {
     const roll = crypto.randomInt(1, 101);
     const reward = getRewardForRoll(roll);
 
-    const { data, error } = await supabase.rpc("loyalty_start_spin", {
+    const { data, error } = await supabase.rpc("loyalty_start_spin_v2", {
       p_wallet: wallet,
       p_object_id: target.objectId,
       p_rarity: target.rarity,

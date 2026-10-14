@@ -11,6 +11,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+// Recovery modules are retained, but no legacy economy route is active by default.
+if (process.env.FLOW_RUNTIME_MODE === "legacy") {
 app.use("/balance", balanceRoutes);
 app.get("/check-backend-balance", checkBackendBalance);
 // Rotta prelievo FLOW
@@ -27,6 +29,7 @@ app.post("/high-balance-spin", useHighBalanceSpin);
 // Free spin da staking Loyal / Whale
 app.get("/staking-free-spin", getStakingFreeSpin);
 app.post("/staking-free-spin", useStakingFreeSpin);
+}
 
 // NFT loyalty XP system (new economy)
 app.get("/loyalty/status", getLoyaltyStatus);
@@ -36,6 +39,13 @@ app.post("/loyalty/spin", startLoyaltySpin);
 app.get("/staking-boost", getStakingBoost);
 app.post("/staking-boost/claim", claimStakingBoost);
 
-app.listen(3000, () => {
+app.get("/health", (_req, res) => res.json({
+  network: "testnet",
+  runtime: process.env.FLOW_RUNTIME_MODE === "legacy" ? "legacy" : "loyalty-v2",
+  maintenanceCycleDays: 30,
+  maintenanceRequiredXp: 1000,
+}));
+
+app.listen(Number(process.env.PORT || 3000), () => {
   console.log("🚀 Backend in ascolto su http://localhost:3000");
 });

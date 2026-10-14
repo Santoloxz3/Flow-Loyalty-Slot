@@ -6,6 +6,11 @@
 [build.environment]
   NODE_VERSION = "22"
   NPM_FLAGS = "--include=dev"
+  VITE_BACKEND_URL = "https://flow-loyalty-backend.onrender.com"
+  VITE_FLOW_RUNTIME_MODE = "loyalty-v2"
+
+[context.deploy-preview.environment]
+  VITE_BACKEND_URL = "https://flow-loyalty-backend-pr-1.onrender.com"
 
 [[redirects]]
   from = "/*"

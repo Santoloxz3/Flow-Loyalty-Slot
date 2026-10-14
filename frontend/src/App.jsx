@@ -19,7 +19,7 @@ import "./App.css";
 
 const FLOW_COIN_TYPE = "0xd0486273be1484fe7881d3ffe2806c1d6437897a88ee496f8e4ff7348728d008::flow::FLOW";
 const SLOT_WALLET_ADDRESS = "0xcdd3d0e5856712698a65fb2d375c3bdd5c80ca1c7c9d3dc219904269f1624f01";
-const BACKEND_URL = "https://flow-loyalty-backend-pr-1.onrender.com"; // PR preview only; restore production URL before merge
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://flow-loyalty-backend.onrender.com";
 const FLOW_ON_SUI_URL = "https://flowonsui.netlify.app";
 const STAKE_PATH = "/stake";
 const TESTNET_GRPC_URL = "https://fullnode.testnet.sui.io:443";
@@ -220,6 +220,24 @@ const calculatePendingStakeRewards = (position, stats) => {
   }
 };
 
+function FlowGodMaintenance({ profile }) {
+  if (!profile?.flowGodUnlockedAt) return (
+    <div className="flow-god-maintenance">FLOW GOD unlocks at 25,000 Lifetime XP. Maintenance XP starts after unlock.</div>
+  );
+  const xp = Number(profile.maintenanceXp || 0);
+  return (
+    <div className="flow-god-maintenance" aria-label="FLOW GOD maintenance">
+      <strong>FLOW GOD {profile.flowGodActive ? "active" : "inactive · Legend benefits"}</strong>
+      <span>Highest tier: FLOW GOD · Lifetime XP preserved</span>
+      <span>Maintenance XP: {xp.toLocaleString()} / 1,000</span>
+      <progress value={Math.min(xp, 1000)} max={1000} aria-label="Maintenance XP progress" />
+      <small>{profile.flowGodActive
+        ? `${xp >= 1000 ? "Renewal secured" : "Earn 1,000 XP to renew"} · cycle ends ${new Date(profile.maintenanceExpiresAt).toLocaleString()}`
+        : `${Math.max(0, 1000 - xp).toLocaleString()} XP to reactivate for 30 days`}</small>
+    </div>
+  );
+}
+
 function GameContainer() {
   const account = useCurrentAccount();
   const walletState = useCurrentWallet();
@@ -291,7 +309,9 @@ function GameContainer() {
   const nextTierProgress = nextLoyaltyTier
     ? Math.min(100, Math.max(0, ((currentTotalXp - currentTierFloor) / Math.max(1, nextLoyaltyTier.xp - currentTierFloor)) * 100))
     : 100;
-  const boostRemainingLabel = activeStakingBoost > 0
+  const boostRemainingLabel = loyaltyProfile?.flowGodUnlockedAt && !loyaltyProfile?.flowGodActive
+    ? "Legend benefits · earn 1,000 Maintenance XP to reactivate"
+    : activeStakingBoost > 0
     ? formatBoostRemaining(loyaltyProfile?.boostExpiresAt)
     : "No active boost";
   const stakingSpinButtonText = stakingSpinPlan === "Whale"
@@ -521,64 +541,19 @@ function GameContainer() {
   };
 
   const fetchStakingFreeSpins = async () => {
-    if (!account?.address) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/staking-free-spin?wallet=${account.address}`);
-      const data = await res.json();
-      setStakingSpinsLeft(res.ok ? data.spinsLeft ?? 0 : 0);
-      const availablePlan = Array.isArray(data.eligiblePlans)
-        ? data.eligiblePlans.find((plan) => plan.available && plan.plan === "Whale") ||
-          data.eligiblePlans.find((plan) => plan.available)
-        : null;
-      setStakingSpinPlan(res.ok && data.spinsLeft > 0 ? availablePlan?.plan || "" : "");
-    } catch (err) {
-      console.error("Error retrieving staking free spins:", err);
-      setStakingSpinsLeft(0);
-      setStakingSpinPlan("");
-    }
+    setStakingSpinsLeft(0);
+    setStakingSpinPlan("");
   };
 
   const fetchHighBalanceSpin = async () => {
-    if (!account?.address) return;
-    try {
-  	  const res = await fetch(`${BACKEND_URL}/high-balance-spin?wallet=${account.address}`);
-	  const data = await res.json();
-	  setHighBalanceCanSpin(data.canSpin ?? false);
-    } catch (err) {
-	  console.error("Error retrieving high balance spin:", err);
-    }
+    setHighBalanceCanSpin(false);
   };
 
-
-
-  const loadSlotBalance = async (wallet) => {
-    try {
-	  const res = await fetch(`${BACKEND_URL}/balance?wallet=${wallet}`);
-	  const data = await res.json();
-	  const balance = data.balance ?? 0;
-	  setSlotBalance(balance);
-	  syncBalanceToGame(balance);
-    } catch (err) {
-	  console.error("Error loading balance:", err);
-    }
+  const loadSlotBalance = async () => {
+    setSlotBalance(0);
   };
 
-
-  const updateSlotBalance = async (wallet, amountToAdd) => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/balance/update`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet, amountToAdd }),
-      });
-      const data = await res.json();
-      setSlotBalance(data.balance);
-      syncBalanceToGame(data.balance);
-    } catch (err) {
-      console.error("Error updating balance:", err);
-    }
-  };
-
+  const updateSlotBalance = async () => {}; // Legacy accounting is inactive.
 
   const fetchBalances = async ({ silent = false } = {}) => {
     const walletAddress = account?.address;
@@ -1490,7 +1465,7 @@ function GameContainer() {
               <p className="wallet-balance-line"><span className="wallet-line-icon" aria-hidden="true">👛</span><strong> FLOW Wallet:</strong> {FLOWBalance ?? "--"}</p>
               <div className="loyalty-summary-card">
                 <div className="loyalty-summary-row">
-                  <span>Total XP</span>
+                  <span>Lifetime XP</span>
                   <strong>{loyaltyProfile?.totalXp ?? 0}</strong>
                 </div>
                 <div className="loyalty-summary-row">
@@ -1520,6 +1495,8 @@ function GameContainer() {
                 ) : null}
               </div>
 
+              <FlowGodMaintenance profile={loyaltyProfile} />
+
               {lastLoyaltySpin ? (
                 <div className="loyalty-last-spin">
                   <strong>{String(lastLoyaltySpin.resultCode || "spin").replaceAll("_", " ").toUpperCase()}</strong>
@@ -1532,7 +1509,7 @@ function GameContainer() {
 
               {freeSpinsLeft === 0 && loyaltyDiagnostics ? (
                 <div className="loyalty-diagnostics">
-                  <strong>Preview NFT diagnostics</strong>
+                  <strong>NFT diagnostics</strong>
                   {"error" in loyaltyDiagnostics ? (
                     <span>{loyaltyDiagnostics.error}</span>
                   ) : (
@@ -1698,7 +1675,7 @@ function GameContainer() {
 
             <div className="staking-loyalty-metrics">
               <div>
-                <span>Total XP</span>
+                <span>Lifetime XP</span>
                 <strong>{currentTotalXp.toLocaleString()}</strong>
               </div>
               <div>
@@ -1721,6 +1698,7 @@ function GameContainer() {
                   : "Maximum loyalty tier reached"}
               </small>
             </div>
+            <FlowGodMaintenance profile={loyaltyProfile} />
           </div>
 
           <div className="staking-research">

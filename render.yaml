@@ -1,0 +1,22 @@
+# Existing Render service can adopt this blueprint without changing protected env files.
+# Import current secrets through the dashboard; never place secret values here.
+services:
+  - type: web
+    name: flow-loyalty-backend
+    runtime: node
+    branch: main
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: node index.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: FLOW_RUNTIME_MODE
+        value: loyalty-v2
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PRIVATE_KEY
+        sync: false

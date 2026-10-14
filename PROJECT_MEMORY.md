@@ -1,185 +1,37 @@
 # FLOW Loyalty Slot — Project Memory
 
-This file contains durable project decisions that must survive long chats, context changes, handoffs, and future agents.
+Updated: 2026-10-14. User authorized promotion of Loyalty V2 to the default operating system on Sui testnet. Mainnet is outside this change.
 
-## How to use this file
+## Product and XP
+NFT ownership -> backend-authorized free spin -> Lifetime XP -> tier -> staking reward boost. No paid slot spins, slot FLOW winnings, Auto Spin or slot withdrawal in the default runtime.
+Lifetime XP = Loyalty XP + Bonus XP. Each authorized spin grants 5 Loyalty XP. Bonus mapping remains no_win 0, glass 5, moon 15, bag 35, flow 55, jackpot 195. Backend RNG and signed NFT ownership checks remain authoritative.
 
-Before making a substantial change to FLOW Loyalty Slot, read:
-
-1. `PROJECT_MEMORY.md`
-2. `WORKFLOW.md`
-3. `SAFETY_AND_ROLLBACK.md`
-4. `ARCHITECTURE.md`
-5. `CURRENT_STATUS.md`
-
-If chat context conflicts with these files, stop and verify the intended state before changing production-critical code.
-
-## Product direction
-
-FLOW Loyalty Slot is moving from a FLOW wagering/payout slot to an NFT loyalty system.
-
-The target model is:
-
-NFT ownership -> Free Spins -> XP -> Loyalty Tier -> temporary Staking Reward Boost.
-
-The slot must NOT:
-
-- require FLOW payment to spin;
-- offer paid spins;
-- credit FLOW winnings from slot outcomes;
-- provide slot-winnings withdrawal.
-
-The slot should be started only through an eligible NFT Free Spin authorized by the backend.
-
-## XP rules
-
-Every completed authorized NFT spin grants:
-
-- 5 Loyalty XP guaranteed;
-- optional Bonus XP based on the backend result.
-
-Current XP mapping:
-
-| Result | Loyalty XP | Bonus XP | Total XP |
-|---|---:|---:|---:|
-| No Win | 5 | 0 | 5 |
-| Glass | 5 | 5 | 10 |
-| Moon | 5 | 15 | 20 |
-| Bag | 5 | 35 | 40 |
-| FLOW | 5 | 55 | 60 |
-| Jackpot / Jolly | 5 | 195 | 200 |
-
-**Total XP = Loyalty XP + Bonus XP.**
-
-Both Loyalty Tier progression and Staking Reward Boost progression use **Total XP**, including Bonus XP.
-
-## Loyalty tiers
-
-| Tier | Total XP threshold | Staking Reward Boost | Duration |
-|---|---:|---:|---:|
-| STARTER | 0 | 0% | — |
-| FLOWER | 500 | +5% | 7 days |
-| HOLDER | 1,500 | +10% | 14 days |
-| WHALE | 4,000 | +15% | 14 days |
-| LEGEND | 10,000 | +20% | 30 days |
-| FLOW GOD | 25,000 | +25% | 30 days |
-
-Rules:
-
-- wording is **Staking Reward Boost**, not APY Bonus;
-- boosts do not stack;
-- a higher boost replaces a lower active boost;
-- the Loyalty Tier remains after its temporary boost expires;
-- each tier boost activates only once;
-- if one spin crosses multiple thresholds, activate only the highest newly crossed tier.
-
-## NFT rarity and Free Spin rules
-
-The new system uses explicit NFT rarity.
-
-| Rarity | Free Spins | Window |
+## Tiers and maintenance
+| Tier | Lifetime XP | Boost |
 |---|---:|---:|
-| low | 1 | 48 hours |
-| medium | 1 | 24 hours |
-| high | 3 | 24 hours |
-| legendary | 5 | 24 hours |
+| Starter | 0 | 0% |
+| Flower | 500 | 5% |
+| Holder | 1,500 | 10% |
+| Whale | 4,000 | 15% |
+| Legend | 10,000 | 20% |
+| FLOW GOD | 25,000 | 25% |
 
-Eligibility requires:
+User explicitly chose the existing boost scale on 2026-10-14. Boosts never stack and apply to verified staking rewards. NFT capital caps and new base APR rates were not requested in this change.
 
-1. NFT Object ID in `public.nft_spin_whitelist`;
-2. explicit rarity in `public.nft_loyalty_rarity`.
+Tiers through Legend are permanent. Their existing one-time temporary boosts retain durations 7/14/14/30 days. FLOW GOD starts a 30-day (720-hour) cycle on first unlock. Maintenance XP starts at zero: historical XP and the spin crossing 25,000 do not count. Later spins add their full XP to both Lifetime and Maintenance XP atomically.
 
-The old `spins_per_day` field is legacy compatibility data and is not authoritative for the XP system.
+At the deadline, >=1,000 Maintenance XP renews from that deadline for 30 days and resets the counter, discarding surplus. Reaching the threshold early secures renewal without moving the deadline. A missed deadline makes FLOW GOD inactive: highest tier remains FLOW GOD, effective tier becomes Legend with +20% fallback until reactivation. Partial Maintenance XP is retained while inactive. Reaching 1,000 while inactive starts a fresh 30-day FLOW GOD cycle and resets the counter. Lifetime XP is never reset.
 
-Preferred NFT administration helper:
+A long absence cannot renew multiple cycles using the same XP. Expiry is reconciled on status, spin and boost claim; a scheduler is unnecessary for benefit enforcement. Existing wallets already at 25,000 XP receive a fresh cycle when first accessed by V2, without historical Maintenance XP.
 
-```sql
-select public.upsert_loyalty_nft('0xOBJECT_ID', 'medium');
-```
+## NFT and authority
+Rarities: low 1/48h, medium 1/24h, high 3/24h, legendary 5/24h. Eligibility requires on-chain ownership, nft_spin_whitelist and explicit nft_loyalty_rarity. Legacy spins_per_day is not authoritative.
+Wallet-wide database locks serialize V2 spins, replay checks, profile snapshots and maintenance transitions. Backend service-role RPC only. Frontend and GDevelop never determine economic rewards. SLOT_READY gates spin consumption, backend roll drives reels, completion signals React. Focus/visibility refresh updates loyalty state.
 
-## Backend authority
+## Recovery and contracts
+Frozen legacy commit: 4c445200c2da7f5f9c4c7ec015314c141cd41bab.
+Safety branch: backup/pre-xp-system-2026-09-21.
+Legacy slot: frontend/public/slot-legacy/ (frozen). Legacy backend modules and original XP SQL/RPC remain for deliberate rollback. FLOW_RUNTIME_MODE=legacy explicitly enables legacy backend routes; default is loyalty-v2.
+Protected .env files and deployed Move staking contract remain unchanged. Off-chain staking supplementation remains separate from on-chain base rewards; failed payouts require review and claim replay remains blocked.
 
-The backend is authoritative for:
-
-- NFT ownership verification;
-- spin eligibility;
-- spin consumption;
-- RNG/result selection;
-- XP;
-- tier;
-- staking boost state;
-- idempotency.
-
-The frontend/GDevelop frame must never be trusted to determine rewards.
-
-## Multi-device rule
-
-A Free Spin must not be usable twice from two devices.
-
-Backend consumption is atomic and idempotent.
-
-A stale second device may temporarily display an old count, but the backend must still reject duplicate/over-limit consumption.
-
-Frontend should refresh loyalty status on relevant focus/visibility events where practical.
-
-## Slot UX
-
-The XP slot must:
-
-- start only after the game is ready;
-- use the backend-provided roll;
-- preserve the visual reel animation;
-- not expose legacy paid-spin controls;
-- not expose legacy Auto Spin;
-- not show legacy `WIN : $FLOW ...` reward overlays;
-- show XP/reward information in the React loyalty panel instead.
-
-The frame currently uses a `SLOT_READY` handshake before an NFT Free Spin can be consumed.
-
-## Legacy preservation
-
-The legacy experience is important and must remain recoverable.
-
-There are two levels of protection:
-
-- Git rollback point / backup branch;
-- physical legacy slot copy.
-
-Physical paths:
-
-- new XP slot: `frontend/public/slot/`
-- frozen legacy slot: `frontend/public/slot-legacy/`
-
-Treat `slot-legacy` as read-only unless an explicit legacy maintenance task is requested.
-
-## Staking
-
-The existing deployed staking Move contract is intentionally unchanged.
-
-Current XP boost implementation is off-chain supplementation after verification of legitimate on-chain staking reward events.
-
-A fully trustless on-chain XP boost would require a deliberate V2 contract/package migration and separate approval.
-
-## Production discipline
-
-Do not merge or deploy the XP migration to production until:
-
-- preview frontend passes;
-- preview backend passes;
-- NFT spin flow passes;
-- XP persistence passes;
-- multi-device/idempotency behavior passes;
-- staking boost behavior is validated;
-- rollback path is verified.
-
-Production changes require explicit approval.
-
-## Security cleanup is separate
-
-Known cleanup items exist, including versioned environment files and legacy database security concerns.
-
-Do not mix broad credential/security cleanup into the functional XP migration unless explicitly requested, because changing them can break the known-working legacy system.
-
-## Core principle
-
-When safety and convenience conflict, preserve the working legacy state and create a reversible test path first.
+Read WORKFLOW, SAFETY_AND_ROLLBACK, ARCHITECTURE and CURRENT_STATUS before changes. Preserve data, backups and rollback branches. Never restore old snapshots over legitimate later activity.
